@@ -1,0 +1,52 @@
+{
+  "calculation_id": "ca176db8-d736-4579-943a-174baa687d98",
+  "status": "eligible",
+  "legal_rule_version": "VN-LBHXH-41/2024-QH15@2025-07-01+ND158/2025/ND-CP+BHXH-340/CSXH-2026",
+  "requested_pension_start_month": "2026-10",
+  "retirement_end_date": "2026-09-30",
+  "normal_retirement_age": "57 years 0 months",
+  "normal_retirement_threshold_date": "2026-09-01",
+  "earliest_normal_pension_start_month": "2026-10",
+  "contribution_summary": {
+    "total_months": 360,
+    "compulsory_months": 360,
+    "voluntary_months": 0,
+    "exact_duration": "30 years 0 months",
+    "rounded_years_for_rate": "30"
+  },
+  "eligibility": {
+    "eligible": true,
+    "case": "normal",
+    "reasons": [],
+    "missing_fields": []
+  },
+  "average_basis": {
+    "amount_vnd": "24628500",
+    "method": "All-period adjusted employer-decided salary average",
+    "coefficient_year": 2026,
+    "state_average_months_used": 0
+  },
+  "pension_rate": {
+    "base_rate_percent": "75",
+    "early_retirement_reduction_percent": "0",
+    "final_rate_percent": "75"
+  },
+  "estimated_monthly_pension_vnd": "18471375",
+  "one_time_retirement_allowance_vnd": "0",
+  "minimum_floor_applied": false,
+  "assumptions": [
+    "pension_start_month is interpreted as the first month receiving pension; employment/retirement ends on the final day of the preceding month.",
+    "Each contribution range is inclusive and monthly_basis_vnd is the monthly salary/income basis for every month in that range."
+  ],
+  "warnings": [
+    "A transitional minimum-pension floor may apply. Supply reference_level_vnd to let the API test and apply that floor.",
+    "This is a rules-based estimate, not an administrative pension decision. The social-insurance authority's verified record and the law effective on the entitlement date control."
+  ],
+  "audit_steps": [
+    "Expanded contribution history to 360 unique months.",
+    "Rounded contribution duration for rate calculation to 30 years.",
+    "Calculated normal retirement threshold as 2026-09-01 at age 57 years 0 months.",
+    "Calculated adjusted average pension basis using: All-period adjusted employer-decided salary average.",
+    "Applied base rate 75% and early-retirement reduction 0%, yielding 75%."
+  ]
+}

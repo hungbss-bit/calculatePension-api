@@ -1,0 +1,160 @@
+openapi: 3.1.0
+info:
+  title: calculatePension API
+  version: 1.0.0
+  description: >-
+    Estimate Vietnam social-insurance pension eligibility, pension rate,
+    average pension basis, monthly pension, and one-time retirement allowance.
+servers:
+  - url: https://YOUR_PUBLIC_HTTPS_DOMAIN
+paths:
+  /v1/calculatePension:
+    post:
+      operationId: calculatePension
+      summary: Calculate an estimated Vietnam social-insurance pension
+      description: >-
+        Call only after collecting date of birth, sex, intended pension-start
+        month, retirement case, and complete monthly contribution history.
+        Never invent missing personal or contribution data.
+      security:
+        - XApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PensionRequest'
+      responses:
+        '200':
+          description: Pension calculation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PensionResponse'
+        '401':
+          description: Missing or invalid API key
+        '422':
+          description: Invalid, overlapping, or incomplete calculation input
+components:
+  securitySchemes:
+    XApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    PensionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - person
+        - pension_start_month
+        - contributions
+      properties:
+        person:
+          $ref: '#/components/schemas/Person'
+        pension_start_month:
+          type: string
+          pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+          description: First month receiving pension, YYYY-MM.
+        retirement_case:
+          type: string
+          default: normal
+          enum:
+            - normal
+            - hazardous_or_special_region
+            - underground_coal
+            - reduced_capacity
+            - occupational_hiv
+            - armed_forces
+        contributions:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ContributionPeriod'
+        impairment_percent:
+          type: number
+          minimum: 0
+          maximum: 100
+        hazardous_or_special_region_months:
+          type: integer
+          minimum: 0
+          default: 0
+        especially_hazardous_months:
+          type: integer
+          minimum: 0
+          default: 0
+        underground_coal_months:
+          type: integer
+          minimum: 0
+          default: 0
+        state_salary_values_are_converted:
+          type: boolean
+          default: false
+        reference_level_vnd:
+          type: number
+          exclusiveMinimum: 0
+        adjustment:
+          $ref: '#/components/schemas/AdjustmentInput'
+    Person:
+      type: object
+      additionalProperties: false
+      required: [date_of_birth, sex]
+      properties:
+        date_of_birth:
+          type: string
+          format: date
+        sex:
+          type: string
+          enum: [male, female]
+    ContributionPeriod:
+      type: object
+      additionalProperties: false
+      required:
+        - from_month
+        - to_month
+        - monthly_basis_vnd
+        - contribution_type
+      properties:
+        from_month:
+          type: string
+          pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+        to_month:
+          type: string
+          pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+        monthly_basis_vnd:
+          type: number
+          exclusiveMinimum: 0
+        contribution_type:
+          type: string
+          enum:
+            - compulsory_state
+            - compulsory_employer
+            - voluntary
+        coefficient_override:
+          type: number
+          exclusiveMinimum: 0
+          description: Optional per-period override; use only from an authoritative table.
+        note:
+          type: string
+    AdjustmentInput:
+      type: object
+      additionalProperties: false
+      properties:
+        coefficient_year:
+          type: integer
+          default: 2026
+          minimum: 2025
+        salary_coefficients:
+          type: object
+          additionalProperties:
+            type: number
+            exclusiveMinimum: 0
+        voluntary_income_coefficients:
+          type: object
+          additionalProperties:
+            type: number
+            exclusiveMinimum: 0
+    PensionResponse:
+      type: object
+      description: Full calculation, eligibility, assumptions, warnings, and audit trail.
+      additionalProperties: true

@@ -1,0 +1,19 @@
+{
+  "person": {
+    "date_of_birth": "1969-09-01",
+    "sex": "female"
+  },
+  "pension_start_month": "2026-10",
+  "retirement_case": "normal",
+  "contributions": [
+    {
+      "from_month": "1996-10",
+      "to_month": "2026-09",
+      "monthly_basis_vnd": 10800000,
+      "contribution_type": "compulsory_employer"
+    }
+  ],
+  "adjustment": {
+    "coefficient_year": 2026
+  }
+}
