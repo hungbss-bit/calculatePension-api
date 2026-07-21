@@ -76,7 +76,7 @@ def get_privacy_policy_html() -> str:
 
   <h2>7. Liên hệ</h2>
   <p>
-    Email: <code>hungbss@gmail.com</code>
+    Email: <code>thay-email-that-cua-ban@example.com</code>
   </p>
 </body>
 </html>"""

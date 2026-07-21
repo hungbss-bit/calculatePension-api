@@ -9,31 +9,6 @@
     "version": "2.1.0"
   },
   "paths": {
-    "/health": {
-      "get": {
-        "tags": [
-          "Hệ thống"
-        ],
-        "summary": "Kiểm tra trạng thái API",
-        "operationId": "health_health_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "type": "object",
-                  "title": "Response Health Health Get"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/capabilities": {
       "get": {
         "tags": [
@@ -1466,6 +1441,11 @@
     {
       "name": "Tính lương hưu",
       "description": "Dự tính điều kiện và mức lương hưu."
+    }
+  ],
+  "servers": [
+    {
+      "url": "https://YOUR_PUBLIC_HTTPS_DOMAIN"
     }
   ]
 }

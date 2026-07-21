@@ -1,0 +1,25 @@
+{
+  "source_document": "Mẫu 07/SBH hoặc bảng quá trình BHXH tương đương",
+  "mapping": {
+    "Từ tháng": "contributions[].from_month",
+    "Đến tháng": "contributions[].to_month",
+    "Trạng thái tham gia": "contributions[].participation_status",
+    "Mức đóng đã xác định là tiền đồng": "contributions[].monthly_basis_vnd",
+    "Loại chế độ lương": "contributions[].contribution_type",
+    "Dòng nguồn": "contributions[].source_row_id",
+    "Nội dung gốc": "contributions[].source_text",
+    "Căn cứ chỉ cộng thời gian": "contributions[].duration_only_reason"
+  },
+  "participation_status_rules": {
+    "contributed": "Có đóng; tính vào tổng thời gian và mức bình quân.",
+    "credited_duration_only": "Chỉ dùng cho thời gian trước 01/01/1995 được công nhận nhưng không hưởng tiền lương hoặc sinh hoạt phí; phải gửi duration_only_reason=pre1995_no_salary_or_living_allowance; không đưa vào mức bình quân.",
+    "not_participating": "Dòng ghi rõ Không tham gia BHXH; loại khỏi tổng thời gian và mức bình quân, không yêu cầu mức đóng."
+  },
+  "blocking_conditions": [
+    "Không rõ mức đóng là hệ số hay số tiền đối với dòng contributed",
+    "Không rõ mức đã gồm phụ cấp đối với dòng contributed",
+    "Dòng được tính BHXH chưa được xác nhận",
+    "Tháng trùng hoặc mâu thuẫn trạng thái tham gia",
+    "Khoảng trống không có dòng trạng thái và chưa xác nhận"
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "person": {
+    "date_of_birth": "1969-01-01",
+    "sex": "female"
+  },
+  "pension_start_month": "2026-08",
+  "retirement_case": "normal",
+  "source_document_type": "mau_07_sbh",
+  "history_confirmed": true,
+  "contributions": [
+    {
+      "from_month": "1990-01",
+      "to_month": "1994-12",
+      "participation_status": "credited_duration_only",
+      "contribution_type": "compulsory_state",
+      "source_row_id": "07-SBH-01",
+      "source_text": "Thời gian công tác được công nhận trước 1995, không hưởng lương/sinh hoạt phí",
+      "confirmation_status": "confirmed",
+      "duration_only_reason": "pre1995_no_salary_or_living_allowance"
+    },
+    {
+      "from_month": "1995-01",
+      "to_month": "2004-12",
+      "participation_status": "contributed",
+      "monthly_basis_vnd": 10000000,
+      "contribution_type": "compulsory_employer",
+      "basis_input_type": "total_vnd",
+      "coefficient_override": 1,
+      "source_row_id": "07-SBH-02",
+      "source_text": "Có tham gia BHXH, mức đóng 10.000.000 đồng/tháng",
+      "confirmation_status": "confirmed"
+    },
+    {
+      "from_month": "2005-01",
+      "to_month": "2005-12",
+      "participation_status": "not_participating",
+      "source_row_id": "07-SBH-03",
+      "source_text": "Không tham gia BHXH"
+    }
+  ],
+  "adjustment": {
+    "coefficient_year": 2026
+  }
+}
