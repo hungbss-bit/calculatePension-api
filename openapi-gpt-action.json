@@ -1727,7 +1727,7 @@
   ],
   "servers": [
     {
-      "url": "https://YOUR_PUBLIC_HTTPS_DOMAIN"
+      "url": "https://calculatepension-api.onrender.com"
     }
   ]
 }
