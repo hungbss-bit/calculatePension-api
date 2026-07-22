@@ -8,7 +8,16 @@
     "Loại chế độ lương": "contributions[].contribution_type",
     "Dòng nguồn": "contributions[].source_row_id",
     "Nội dung gốc": "contributions[].source_text",
-    "Căn cứ chỉ cộng thời gian": "contributions[].duration_only_reason"
+    "Căn cứ chỉ cộng thời gian": "contributions[].duration_only_reason",
+    "Mức đóng": "contributions[].sbh_components.base_value",
+    "Phụ cấp Chức vụ": "contributions[].sbh_components.position_allowance",
+    "Phụ cấp TN VK": "contributions[].sbh_components.seniority_beyond_frame_allowance",
+    "Phụ cấp TN Nghề": "contributions[].sbh_components.professional_seniority_allowance",
+    "Phụ cấp Khu vực": "contributions[].sbh_components.regional_allowance",
+    "Phụ cấp Khác": "contributions[].sbh_components.other_allowance",
+    "Phụ cấp Tái cử": "contributions[].sbh_components.reelection_allowance",
+    "Đơn vị hệ số hoặc VND": "contributions[].sbh_components.unit",
+    "Lương cơ sở quy đổi nếu cần": "contributions[].sbh_components.base_salary_vnd_override"
   },
   "participation_status_rules": {
     "contributed": "Có đóng; tính vào tổng thời gian và mức bình quân.",
@@ -16,10 +25,17 @@
     "not_participating": "Dòng ghi rõ Không tham gia BHXH; loại khỏi tổng thời gian và mức bình quân, không yêu cầu mức đóng."
   },
   "blocking_conditions": [
-    "Không rõ mức đóng là hệ số hay số tiền đối với dòng contributed",
-    "Không rõ mức đã gồm phụ cấp đối với dòng contributed",
-    "Dòng được tính BHXH chưa được xác nhận",
+    "Không rõ đơn vị chung của Mức đóng và các phụ cấp",
+    "Có thành phần ghi theo phần trăm nhưng chưa quy đổi về cùng đơn vị",
+    "Dòng contributed chưa được xác nhận",
     "Tháng trùng hoặc mâu thuẫn trạng thái tham gia",
     "Khoảng trống không có dòng trạng thái và chưa xác nhận"
-  ]
+  ],
+  "version": "1.2",
+  "component_formula": {
+    "description": "Tổng hệ số/mức đóng BHXH trên Mẫu 07/SBH bằng Mức đóng cộng toàn bộ 6 cột phụ cấp có giá trị.",
+    "formula": "Mức đóng + Chức vụ + TN VK + TN Nghề + Khu vực + Khác + Tái cử",
+    "api_basis_input_type": "mau_07_sbh_components",
+    "api_field": "contributions[].sbh_components"
+  }
 }

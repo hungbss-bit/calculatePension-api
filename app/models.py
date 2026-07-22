@@ -51,8 +51,14 @@ class BasisInputType(str, Enum):
     total_vnd = "total_vnd"
     converted_state_vnd = "converted_state_vnd"
     component_sum_vnd = "component_sum_vnd"
+    mau_07_sbh_components = "mau_07_sbh_components"
     salary_coefficient = "salary_coefficient"
     unknown = "unknown"
+
+
+class SbhComponentUnit(str, Enum):
+    coefficient = "coefficient"
+    vnd = "vnd"
 
 
 class ConfirmationStatus(str, Enum):
@@ -92,6 +98,45 @@ class BasisComponents(BaseModel):
         )
 
 
+class Mau07SbhBasisComponents(BaseModel):
+    model_config = ConfigDict(title="Các thành phần Mẫu 07/SBH")
+    unit: SbhComponentUnit = Field(
+        title="Đơn vị thành phần",
+        description="coefficient = hệ số; vnd = đồng/tháng. Tất cả thành phần phải cùng đơn vị.",
+    )
+    base_value: Annotated[Decimal, Field(ge=0)] = Field(
+        title="Mức đóng gốc",
+        description="Giá trị tại cột Mức đóng của Mẫu 07/SBH.",
+    )
+    position_allowance: Annotated[Decimal, Field(ge=0)] = Field(default=Decimal("0"), title="Phụ cấp chức vụ")
+    seniority_beyond_frame_allowance: Annotated[Decimal, Field(ge=0)] = Field(default=Decimal("0"), title="Phụ cấp thâm niên vượt khung")
+    professional_seniority_allowance: Annotated[Decimal, Field(ge=0)] = Field(default=Decimal("0"), title="Phụ cấp thâm niên nghề")
+    regional_allowance: Annotated[Decimal, Field(ge=0)] = Field(default=Decimal("0"), title="Phụ cấp khu vực")
+    other_allowance: Annotated[Decimal, Field(ge=0)] = Field(default=Decimal("0"), title="Phụ cấp khác")
+    reelection_allowance: Annotated[Decimal, Field(ge=0)] = Field(default=Decimal("0"), title="Phụ cấp tái cử")
+    base_salary_vnd_override: Annotated[Decimal | None, Field(gt=0)] = Field(
+        default=None,
+        title="Mức lương cơ sở dùng quy đổi",
+        description=(
+            "Tùy chọn. Dùng khi thành phần là hệ số và cần chỉ định lương cơ sở cho toàn bộ giai đoạn. "
+            "Nếu bỏ trống với lương Nhà nước, API dùng lương cơ sở theo từng tháng; trước năm 2016 dùng mức tại tháng hưởng."
+        ),
+    )
+
+    def allowance_total(self) -> Decimal:
+        return sum((
+            self.position_allowance,
+            self.seniority_beyond_frame_allowance,
+            self.professional_seniority_allowance,
+            self.regional_allowance,
+            self.other_allowance,
+            self.reelection_allowance,
+        ), Decimal("0"))
+
+    def total_component_value(self) -> Decimal:
+        return self.base_value + self.allowance_total()
+
+
 class ContributionPeriod(BaseModel):
     model_config = ConfigDict(title="Giai đoạn trong quá trình BHXH")
     from_month: str = Field(pattern=YEAR_MONTH_PATTERN, title="Từ tháng")
@@ -129,6 +174,14 @@ class ContributionPeriod(BaseModel):
         title="Kiểu dữ liệu mức đóng",
     )
     basis_components: BasisComponents | None = None
+    sbh_components: Mau07SbhBasisComponents | None = Field(
+        default=None,
+        title="Các thành phần cột Mẫu 07/SBH",
+        description=(
+            "Tổng hệ số/mức đóng = Mức đóng + Chức vụ + TN VK + TN Nghề + "
+            "Khu vực + Khác + Tái cử. Chỉ dùng khi basis_input_type=mau_07_sbh_components."
+        ),
+    )
     source_value: Decimal | None = Field(
         default=None,
         title="Giá trị đọc từ hồ sơ",
@@ -180,6 +233,26 @@ class ContributionPeriod(BaseModel):
             ):
                 raise ValueError(
                     "Dữ liệu component_sum_vnd phải có monthly_basis_vnd hoặc các thành phần tiền lương."
+                )
+
+        if self.basis_input_type == BasisInputType.mau_07_sbh_components:
+            if self.sbh_components is None:
+                raise ValueError(
+                    "mau_07_sbh_components phải có sbh_components."
+                )
+            if self.monthly_basis_vnd is not None or self.basis_components is not None:
+                raise ValueError(
+                    "Không gửi monthly_basis_vnd/basis_components cùng sbh_components để tránh cộng hai lần."
+                )
+            if self.sbh_components.total_component_value() <= 0:
+                raise ValueError("Tổng Mức đóng và các phụ cấp phải lớn hơn 0.")
+            if (
+                self.sbh_components.unit == SbhComponentUnit.coefficient
+                and self.contribution_type != ContributionType.compulsory_state
+                and self.sbh_components.base_salary_vnd_override is None
+            ):
+                raise ValueError(
+                    "Thành phần hệ số ngoài chế độ lương Nhà nước phải có base_salary_vnd_override."
                 )
         return self
 
@@ -297,6 +370,26 @@ class YearlyAdjustmentBreakdown(BaseModel):
     coefficient: Decimal | None
 
 
+class BasisComponentAudit(BaseModel):
+    source_row_id: str | None = None
+    from_month: str
+    to_month: str
+    component_unit: SbhComponentUnit
+    base_value: Decimal
+    position_allowance: Decimal
+    seniority_beyond_frame_allowance: Decimal
+    professional_seniority_allowance: Decimal
+    regional_allowance: Decimal
+    other_allowance: Decimal
+    reelection_allowance: Decimal
+    allowance_total: Decimal
+    total_component_value: Decimal
+    base_salary_values_used_vnd: list[Decimal] = Field(default_factory=list)
+    monthly_basis_min_vnd: Decimal | None = None
+    monthly_basis_max_vnd: Decimal | None = None
+    formula_vi: str
+
+
 class AverageBasisResult(BaseModel):
     amount_vnd: Decimal | None = Field(description="Trường tương thích ngược; bằng average_monthly_basis_vnd.")
     average_monthly_basis_vnd: Decimal | None = Field(description="Mức bình quân tiền lương/thu nhập làm căn cứ đóng BHXH trước khi nhân tỷ lệ hưởng.")
@@ -337,6 +430,7 @@ class PensionResponse(BaseModel):
     contribution_summary: ContributionSummary
     eligibility: EligibilityResult
     average_basis: AverageBasisResult
+    basis_component_audit: list[BasisComponentAudit] = Field(default_factory=list)
     pension_rate: PensionRateResult
 
     estimated_monthly_pension_vnd: Decimal | None

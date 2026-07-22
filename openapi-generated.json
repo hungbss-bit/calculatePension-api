@@ -2,11 +2,11 @@
   "openapi": "3.1.0",
   "info": {
     "title": "API calculatePension - Tính lương hưu BHXH",
-    "description": "API dự tính lương hưu BHXH Việt Nam, hỗ trợ dữ liệu chuẩn hóa từ Mẫu 07/SBH, kiểm tra tháng trống/trùng, trạng thái không tham gia, thời gian chỉ cộng thời gian, quá trình hỗn hợp và bộ hệ số theo năm hưởng. Kết quả chỉ mang tính tham khảo.",
+    "description": "API dự tính lương hưu BHXH Việt Nam, hỗ trợ dữ liệu chuẩn hóa từ Mẫu 07/SBH, kiểm tra tháng trống/trùng, trạng thái không tham gia, thời gian chỉ cộng thời gian, tổng hợp Mức đóng và 6 cột phụ cấp của Mẫu 07/SBH, quá trình hỗn hợp và bộ hệ số theo năm hưởng. Kết quả chỉ mang tính tham khảo.",
     "contact": {
       "name": "Quản trị viên calculatePension"
     },
-    "version": "2.1.0"
+    "version": "2.2.0"
   },
   "paths": {
     "/health": {
@@ -287,6 +287,130 @@
         ],
         "title": "AverageBasisResult"
       },
+      "BasisComponentAudit": {
+        "properties": {
+          "source_row_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Row Id"
+          },
+          "from_month": {
+            "type": "string",
+            "title": "From Month"
+          },
+          "to_month": {
+            "type": "string",
+            "title": "To Month"
+          },
+          "component_unit": {
+            "$ref": "#/components/schemas/SbhComponentUnit"
+          },
+          "base_value": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Base Value"
+          },
+          "position_allowance": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Position Allowance"
+          },
+          "seniority_beyond_frame_allowance": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Seniority Beyond Frame Allowance"
+          },
+          "professional_seniority_allowance": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Professional Seniority Allowance"
+          },
+          "regional_allowance": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Regional Allowance"
+          },
+          "other_allowance": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Other Allowance"
+          },
+          "reelection_allowance": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Reelection Allowance"
+          },
+          "allowance_total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Allowance Total"
+          },
+          "total_component_value": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total Component Value"
+          },
+          "base_salary_values_used_vnd": {
+            "items": {
+              "type": "string",
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+            },
+            "type": "array",
+            "title": "Base Salary Values Used Vnd"
+          },
+          "monthly_basis_min_vnd": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Basis Min Vnd"
+          },
+          "monthly_basis_max_vnd": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Basis Max Vnd"
+          },
+          "formula_vi": {
+            "type": "string",
+            "title": "Formula Vi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "from_month",
+          "to_month",
+          "component_unit",
+          "base_value",
+          "position_allowance",
+          "seniority_beyond_frame_allowance",
+          "professional_seniority_allowance",
+          "regional_allowance",
+          "other_allowance",
+          "reelection_allowance",
+          "allowance_total",
+          "total_component_value",
+          "formula_vi"
+        ],
+        "title": "BasisComponentAudit"
+      },
       "BasisComponents": {
         "properties": {
           "main_salary_vnd": {
@@ -347,6 +471,7 @@
           "total_vnd",
           "converted_state_vnd",
           "component_sum_vnd",
+          "mau_07_sbh_components",
           "salary_coefficient",
           "unknown"
         ],
@@ -497,6 +622,18 @@
                 "type": "null"
               }
             ]
+          },
+          "sbh_components": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Mau07SbhBasisComponents"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Các thành phần cột Mẫu 07/SBH",
+            "description": "Tổng hệ số/mức đóng = Mức đóng + Chức vụ + TN VK + TN Nghề + Khu vực + Khác + Tái cử. Chỉ dùng khi basis_input_type=mau_07_sbh_components."
           },
           "source_value": {
             "anyOf": [
@@ -906,6 +1043,136 @@
         ],
         "title": "LegalReference"
       },
+      "Mau07SbhBasisComponents": {
+        "properties": {
+          "unit": {
+            "$ref": "#/components/schemas/SbhComponentUnit",
+            "title": "Đơn vị thành phần",
+            "description": "coefficient = hệ số; vnd = đồng/tháng. Tất cả thành phần phải cùng đơn vị."
+          },
+          "base_value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Mức đóng gốc",
+            "description": "Giá trị tại cột Mức đóng của Mẫu 07/SBH."
+          },
+          "position_allowance": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Phụ cấp chức vụ",
+            "default": "0"
+          },
+          "seniority_beyond_frame_allowance": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Phụ cấp thâm niên vượt khung",
+            "default": "0"
+          },
+          "professional_seniority_allowance": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Phụ cấp thâm niên nghề",
+            "default": "0"
+          },
+          "regional_allowance": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Phụ cấp khu vực",
+            "default": "0"
+          },
+          "other_allowance": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Phụ cấp khác",
+            "default": "0"
+          },
+          "reelection_allowance": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Phụ cấp tái cử",
+            "default": "0"
+          },
+          "base_salary_vnd_override": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mức lương cơ sở dùng quy đổi",
+            "description": "Tùy chọn. Dùng khi thành phần là hệ số và cần chỉ định lương cơ sở cho toàn bộ giai đoạn. Nếu bỏ trống với lương Nhà nước, API dùng lương cơ sở theo từng tháng; trước năm 2016 dùng mức tại tháng hưởng."
+          }
+        },
+        "type": "object",
+        "required": [
+          "unit",
+          "base_value"
+        ],
+        "title": "Các thành phần Mẫu 07/SBH"
+      },
       "ParticipationStatus": {
         "type": "string",
         "enum": [
@@ -1213,6 +1480,13 @@
           "average_basis": {
             "$ref": "#/components/schemas/AverageBasisResult"
           },
+          "basis_component_audit": {
+            "items": {
+              "$ref": "#/components/schemas/BasisComponentAudit"
+            },
+            "type": "array",
+            "title": "Basis Component Audit"
+          },
           "pension_rate": {
             "$ref": "#/components/schemas/PensionRateResult"
           },
@@ -1339,6 +1613,14 @@
           "armed_forces"
         ],
         "title": "RetirementCase"
+      },
+      "SbhComponentUnit": {
+        "type": "string",
+        "enum": [
+          "coefficient",
+          "vnd"
+        ],
+        "title": "SbhComponentUnit"
       },
       "Sex": {
         "type": "string",

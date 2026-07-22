@@ -1,6 +1,6 @@
 {
-  "version": "2.1.0",
-  "legal_rule_version": "VN-LBHXH-41/2024-QH15@2025-07-01+ND158/2025/ND-CP+ND159/2025/ND-CP+TT12/2025/TT-BNV+ND135/2020/ND-CP+BHXH-340/CSXH-2026+PRE1995-NO-SALARY-DURATION-ONLY",
+  "version": "2.2.0",
+  "legal_rule_version": "VN-LBHXH-41/2024-QH15@2025-07-01+ND158/2025/ND-CP+ND159/2025/ND-CP+TT12/2025/TT-BNV+ND135/2020/ND-CP+BHXH-340/CSXH-2026+PRE1995-NO-SALARY-DURATION-ONLY+MAU07-COMPONENT-SUM-V2",
   "built_in_coefficient_years": [
     2026
   ],
@@ -12,6 +12,8 @@
     "coefficient_year_must_equal_benefit_year": true,
     "explicit_non_participation_is_excluded": true,
     "duration_only_requires_pre1995_no_salary_reason": true,
-    "average_basis_is_returned_before_rate": true
+    "average_basis_is_returned_before_rate": true,
+    "mau_07_sbh_total_basis_formula": "Mức đóng + Chức vụ + TN VK + TN Nghề + Khu vực + Khác + Tái cử",
+    "prevent_double_counting_monthly_basis_and_components": true
   }
 }

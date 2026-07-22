@@ -372,3 +372,94 @@ def test_duration_only_requires_specific_legal_reason():
             }],
             "adjustment": {"coefficient_year": 2026}
         })
+
+
+def test_mau07_component_sum_coefficient_adds_base_and_all_allowances():
+    result = calculate_pension(req({
+        "person": {"date_of_birth": "1969-01-01", "sex": "female"},
+        "pension_start_month": "2026-08",
+        "retirement_case": "normal",
+        "contributions": [{
+            "from_month": "2011-08",
+            "to_month": "2026-07",
+            "participation_status": "contributed",
+            "contribution_type": "compulsory_state",
+            "basis_input_type": "mau_07_sbh_components",
+            "sbh_components": {
+                "unit": "coefficient",
+                "base_value": 6.1,
+                "position_allowance": 0.3,
+                "seniority_beyond_frame_allowance": 0,
+                "professional_seniority_allowance": 0,
+                "regional_allowance": 0,
+                "other_allowance": 0,
+                "reelection_allowance": 0,
+                "base_salary_vnd_override": 2_530_000
+            },
+            "coefficient_override": 1,
+            "source_row_id": "07-SBH-01"
+        }],
+        "adjustment": {"coefficient_year": 2026}
+    }))
+    assert result.status == "eligible"
+    assert result.basis_component_audit[0].total_component_value == Decimal("6.4")
+    assert result.basis_component_audit[0].allowance_total == Decimal("0.3")
+    assert result.basis_component_audit[0].monthly_basis_min_vnd == Decimal("16192000")
+    assert result.average_basis.average_monthly_basis_vnd == Decimal("16192000")
+    assert result.estimated_monthly_pension_vnd == Decimal("7286400")
+
+
+def test_mau07_component_sum_vnd_adds_all_six_allowance_columns():
+    result = calculate_pension(req({
+        "person": {"date_of_birth": "1969-01-01", "sex": "female"},
+        "pension_start_month": "2026-08",
+        "retirement_case": "normal",
+        "contributions": [{
+            "from_month": "2011-08",
+            "to_month": "2026-07",
+            "participation_status": "contributed",
+            "contribution_type": "compulsory_employer",
+            "basis_input_type": "mau_07_sbh_components",
+            "sbh_components": {
+                "unit": "vnd",
+                "base_value": 10_000_000,
+                "position_allowance": 1_000_000,
+                "seniority_beyond_frame_allowance": 2_000_000,
+                "professional_seniority_allowance": 3_000_000,
+                "regional_allowance": 4_000_000,
+                "other_allowance": 5_000_000,
+                "reelection_allowance": 6_000_000
+            },
+            "coefficient_override": 1,
+            "source_row_id": "07-SBH-02"
+        }],
+        "adjustment": {"coefficient_year": 2026}
+    }))
+    assert result.status == "eligible"
+    assert result.basis_component_audit[0].allowance_total == Decimal("21000000")
+    assert result.basis_component_audit[0].total_component_value == Decimal("31000000")
+    assert result.average_basis.average_monthly_basis_vnd == Decimal("31000000")
+
+
+def test_mau07_components_reject_parallel_monthly_basis_to_prevent_double_counting():
+    with pytest.raises(ValidationError):
+        req({
+            "person": {"date_of_birth": "1969-01-01", "sex": "female"},
+            "pension_start_month": "2026-08",
+            "retirement_case": "normal",
+            "contributions": [{
+                "from_month": "2011-08",
+                "to_month": "2026-07",
+                "participation_status": "contributed",
+                "contribution_type": "compulsory_state",
+                "basis_input_type": "mau_07_sbh_components",
+                "monthly_basis_vnd": 16_192_000,
+                "sbh_components": {
+                    "unit": "coefficient",
+                    "base_value": 6.1,
+                    "position_allowance": 0.3,
+                    "base_salary_vnd_override": 2_530_000
+                }
+            }],
+            "adjustment": {"coefficient_year": 2026}
+        })

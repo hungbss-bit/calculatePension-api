@@ -10,7 +10,7 @@ LEGAL_RULE_VERSION = (
     "+ND159/2025/ND-CP"
     "+TT12/2025/TT-BNV"
     "+ND135/2020/ND-CP"
-    "+BHXH-340/CSXH-2026+PRE1995-NO-SALARY-DURATION-ONLY"
+    "+BHXH-340/CSXH-2026+PRE1995-NO-SALARY-DURATION-ONLY+MAU07-COMPONENT-SUM-V2"
 )
 
 LEGAL_REFERENCES = [
@@ -68,6 +68,46 @@ COEFFICIENTS_2026: dict[int, Decimal] = {
 VOLUNTARY_COEFFICIENTS_2026: dict[int, Decimal] = {
     year: value for year, value in COEFFICIENTS_2026.items() if year >= 2008
 }
+
+
+# Diễn biến lương tối thiểu chung/lương cơ sở dùng quy đổi các dòng hệ số
+# trong Mẫu 07/SBH. Mỗi phần tử có hiệu lực từ ngày ghi ở khóa.
+BASE_SALARY_TIMELINE: list[tuple[date, Decimal]] = [
+    (date(1995, 1, 1), Decimal("120000")),
+    (date(1997, 1, 1), Decimal("144000")),
+    (date(2000, 1, 1), Decimal("180000")),
+    (date(2001, 1, 1), Decimal("210000")),
+    (date(2003, 1, 1), Decimal("290000")),
+    (date(2005, 10, 1), Decimal("350000")),
+    (date(2006, 10, 1), Decimal("450000")),
+    (date(2008, 1, 1), Decimal("540000")),
+    (date(2009, 5, 1), Decimal("650000")),
+    (date(2010, 5, 1), Decimal("730000")),
+    (date(2011, 5, 1), Decimal("830000")),
+    (date(2012, 5, 1), Decimal("1050000")),
+    (date(2013, 7, 1), Decimal("1150000")),
+    (date(2016, 5, 1), Decimal("1210000")),
+    (date(2017, 7, 1), Decimal("1300000")),
+    (date(2018, 7, 1), Decimal("1390000")),
+    (date(2019, 7, 1), Decimal("1490000")),
+    (date(2023, 7, 1), Decimal("1800000")),
+    (date(2024, 7, 1), Decimal("2340000")),
+    (date(2026, 7, 1), Decimal("2530000")),
+]
+
+
+def base_salary_for_month(month: date) -> Decimal:
+    applicable: Decimal | None = None
+    for effective_date, amount in BASE_SALARY_TIMELINE:
+        if month >= effective_date:
+            applicable = amount
+        else:
+            break
+    if applicable is None:
+        raise ValueError(
+            f"Chưa có mức lương cơ sở để quy đổi hệ số tại tháng {month.year:04d}-{month.month:02d}."
+        )
+    return applicable
 
 
 def retirement_age_for_year(sex: str, year: int) -> tuple[int, int]:

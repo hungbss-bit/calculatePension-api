@@ -26,10 +26,10 @@ OPENAPI_TAGS = [
 
 app = FastAPI(
     title="API calculatePension - Tính lương hưu BHXH",
-    version="2.1.0",
+    version="2.2.0",
     description=(
         "API dự tính lương hưu BHXH Việt Nam, hỗ trợ dữ liệu chuẩn hóa từ Mẫu 07/SBH, "
-        "kiểm tra tháng trống/trùng, trạng thái không tham gia, thời gian chỉ cộng thời gian, quá trình hỗn hợp và bộ hệ số theo năm hưởng. "
+        "kiểm tra tháng trống/trùng, trạng thái không tham gia, thời gian chỉ cộng thời gian, tổng hợp Mức đóng và 6 cột phụ cấp của Mẫu 07/SBH, quá trình hỗn hợp và bộ hệ số theo năm hưởng. "
         "Kết quả chỉ mang tính tham khảo."
     ),
     contact={"name": "Quản trị viên calculatePension"},
@@ -88,7 +88,7 @@ def privacy_policy() -> HTMLResponse:
     summary="Kiểm tra trạng thái API",
 )
 def health() -> dict[str, str]:
-    return {"status": "ok", "service": "calculatePension", "version": "2.1.0"}
+    return {"status": "ok", "service": "calculatePension", "version": "2.2.0"}
 
 
 @app.get(

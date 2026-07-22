@@ -1,0 +1,36 @@
+{
+  "person": {
+    "date_of_birth": "1969-01-01",
+    "sex": "female"
+  },
+  "pension_start_month": "2026-08",
+  "retirement_case": "normal",
+  "source_document_type": "mau_07_sbh",
+  "history_confirmed": true,
+  "contributions": [
+    {
+      "from_month": "2011-08",
+      "to_month": "2026-07",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_state",
+      "basis_input_type": "mau_07_sbh_components",
+      "sbh_components": {
+        "unit": "coefficient",
+        "base_value": 6.1,
+        "position_allowance": 0.3,
+        "seniority_beyond_frame_allowance": 0,
+        "professional_seniority_allowance": 0,
+        "regional_allowance": 0,
+        "other_allowance": 0,
+        "reelection_allowance": 0,
+        "base_salary_vnd_override": 2530000
+      },
+      "coefficient_override": 1,
+      "source_row_id": "07-SBH-01",
+      "confirmation_status": "confirmed"
+    }
+  ],
+  "adjustment": {
+    "coefficient_year": 2026
+  }
+}

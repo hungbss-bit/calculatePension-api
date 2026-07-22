@@ -1,0 +1,224 @@
+{
+  "calculation_id": "4925b58b-3a07-4f95-9672-8d66c6974172",
+  "status": "eligible",
+  "error_code": null,
+  "legal_rule_version": "VN-LBHXH-41/2024-QH15@2025-07-01+ND158/2025/ND-CP+ND159/2025/ND-CP+TT12/2025/TT-BNV+ND135/2020/ND-CP+BHXH-340/CSXH-2026+PRE1995-NO-SALARY-DURATION-ONLY+MAU07-COMPONENT-SUM-V2",
+  "requested_pension_start_month": "2026-08",
+  "retirement_end_date": "2026-07-31",
+  "normal_retirement_age_in_retirement_year": "57 tuổi",
+  "normal_retirement_threshold_date": "2026-01-01",
+  "earliest_normal_pension_start_month": "2025-10",
+  "history_validation": {
+    "valid_for_calculation": true,
+    "total_unique_months": 180,
+    "average_basis_months": 180,
+    "credited_duration_only_months": 0,
+    "excluded_non_participation_months": 0,
+    "gaps": [],
+    "overlaps": [],
+    "issues": []
+  },
+  "contribution_summary": {
+    "total_months": 180,
+    "compulsory_months": 180,
+    "voluntary_months": 0,
+    "average_basis_months": 180,
+    "credited_duration_only_months": 0,
+    "excluded_non_participation_months": 0,
+    "exact_duration": "15 năm 0 tháng",
+    "rounded_years_for_rate": "15"
+  },
+  "eligibility": {
+    "eligible": true,
+    "case": "normal",
+    "regime": "compulsory",
+    "reasons": [],
+    "missing_fields": [],
+    "required_total_months": 180,
+    "required_compulsory_months": 180,
+    "months_short": 0,
+    "can_pay_missing_months_once": false
+  },
+  "average_basis": {
+    "amount_vnd": "16192000",
+    "average_monthly_basis_vnd": "16192000",
+    "basis_months_used": 120,
+    "method": "Bình quân thời kỳ cuối theo chế độ tiền lương Nhà nước",
+    "coefficient_year": 2026,
+    "state_average_months_used": 120,
+    "yearly_breakdown": [
+      {
+        "year": 2016,
+        "contribution_type": "compulsory_state",
+        "months": 5,
+        "original_total_vnd": "80960000",
+        "adjusted_total_vnd": "80960000",
+        "coefficient": "1"
+      },
+      {
+        "year": 2017,
+        "contribution_type": "compulsory_state",
+        "months": 12,
+        "original_total_vnd": "194304000",
+        "adjusted_total_vnd": "194304000",
+        "coefficient": "1"
+      },
+      {
+        "year": 2018,
+        "contribution_type": "compulsory_state",
+        "months": 12,
+        "original_total_vnd": "194304000",
+        "adjusted_total_vnd": "194304000",
+        "coefficient": "1"
+      },
+      {
+        "year": 2019,
+        "contribution_type": "compulsory_state",
+        "months": 12,
+        "original_total_vnd": "194304000",
+        "adjusted_total_vnd": "194304000",
+        "coefficient": "1"
+      },
+      {
+        "year": 2020,
+        "contribution_type": "compulsory_state",
+        "months": 12,
+        "original_total_vnd": "194304000",
+        "adjusted_total_vnd": "194304000",
+        "coefficient": "1"
+      },
+      {
+        "year": 2021,
+        "contribution_type": "compulsory_state",
+        "months": 12,
+        "original_total_vnd": "194304000",
+        "adjusted_total_vnd": "194304000",
+        "coefficient": "1"
+      },
+      {
+        "year": 2022,
+        "contribution_type": "compulsory_state",
+        "months": 12,
+        "original_total_vnd": "194304000",
+        "adjusted_total_vnd": "194304000",
+        "coefficient": "1"
+      },
+      {
+        "year": 2023,
+        "contribution_type": "compulsory_state",
+        "months": 12,
+        "original_total_vnd": "194304000",
+        "adjusted_total_vnd": "194304000",
+        "coefficient": "1"
+      },
+      {
+        "year": 2024,
+        "contribution_type": "compulsory_state",
+        "months": 12,
+        "original_total_vnd": "194304000",
+        "adjusted_total_vnd": "194304000",
+        "coefficient": "1"
+      },
+      {
+        "year": 2025,
+        "contribution_type": "compulsory_state",
+        "months": 12,
+        "original_total_vnd": "194304000",
+        "adjusted_total_vnd": "194304000",
+        "coefficient": "1"
+      },
+      {
+        "year": 2026,
+        "contribution_type": "compulsory_state",
+        "months": 7,
+        "original_total_vnd": "113344000",
+        "adjusted_total_vnd": "113344000",
+        "coefficient": "1"
+      }
+    ]
+  },
+  "basis_component_audit": [
+    {
+      "source_row_id": "07-SBH-01",
+      "from_month": "2011-08",
+      "to_month": "2026-07",
+      "component_unit": "coefficient",
+      "base_value": "6.1",
+      "position_allowance": "0.3",
+      "seniority_beyond_frame_allowance": "0",
+      "professional_seniority_allowance": "0",
+      "regional_allowance": "0",
+      "other_allowance": "0",
+      "reelection_allowance": "0",
+      "allowance_total": "0.3",
+      "total_component_value": "6.4",
+      "base_salary_values_used_vnd": [
+        "2530000"
+      ],
+      "monthly_basis_min_vnd": "16192000",
+      "monthly_basis_max_vnd": "16192000",
+      "formula_vi": "6.1 + 0.3 + 0 + 0 + 0 + 0 + 0 = 6.4 tổng hệ số; 6.4 × 2530000 = 16192000 đồng/tháng"
+    }
+  ],
+  "pension_rate": {
+    "rounded_years": "15",
+    "base_rate_percent": "45",
+    "early_retirement_months": 0,
+    "early_retirement_reduction_percent": "0",
+    "final_rate_percent": "45",
+    "reduction_reference_age": null
+  },
+  "estimated_monthly_pension_vnd": "7286400",
+  "pension_calculation_formula": "16192000 × 45% = 7286400 đồng/tháng",
+  "one_time_retirement_allowance_vnd": "0",
+  "minimum_floor_applied": false,
+  "assumptions": [
+    "pension_start_month là tháng đầu tiên hưởng; ngày nghỉ được hiểu là ngày cuối tháng trước.",
+    "Mỗi khoảng đóng bao gồm cả tháng bắt đầu và tháng kết thúc.",
+    "Dòng ghi rõ không tham gia BHXH được loại khỏi cả thời gian và mức bình quân.",
+    "Giai đoạn credited_duration_only chỉ cộng thời gian hưởng, không đưa mức lương vào bình quân.",
+    "Với Mẫu 07/SBH dùng thành phần, tổng hệ số/mức đóng bằng Mức đóng + Chức vụ + TN VK + TN Nghề + Khu vực + Khác + Tái cử."
+  ],
+  "warnings": [
+    "Kết quả là ước tính; hồ sơ được cơ quan BHXH xác nhận và quy định có hiệu lực tại thời điểm giải quyết là căn cứ cuối cùng."
+  ],
+  "audit_steps": [
+    "Chuẩn hóa được 180 tháng được tính là thời gian tham gia BHXH.",
+    "Có 180 tháng có mức đóng dùng tính bình quân; 0 tháng chỉ cộng thời gian; 0 tháng không tham gia đã loại bỏ.",
+    "Thời gian dùng tính tỷ lệ sau làm tròn: 15 năm.",
+    "Tính mức bình quân theo phương pháp: Bình quân thời kỳ cuối theo chế độ tiền lương Nhà nước.",
+    "Tỷ lệ cơ bản 45%, giảm 0%, còn 45%."
+  ],
+  "legal_references": [
+    {
+      "document": "Luật Bảo hiểm xã hội số 41/2024/QH15",
+      "provisions": "Điều 64, 65, 66, 68, 72, 73 và 111",
+      "purpose": "Điều kiện hưởng, tỷ lệ, giảm do nghỉ trước tuổi, trợ cấp một lần, mức bình quân và quá trình hỗn hợp."
+    },
+    {
+      "document": "Nghị định 158/2025/NĐ-CP",
+      "provisions": "Điều 15, Điều 16 và quy định về thời gian đóng hỗn hợp",
+      "purpose": "Mức bình quân, điều chỉnh tiền lương; loại khỏi mức bình quân thời gian trước 01/01/1995 được công nhận nhưng không hưởng lương/sinh hoạt phí; xác định chính sách áp dụng khi có quá trình hỗn hợp."
+    },
+    {
+      "document": "Nghị định 159/2025/NĐ-CP",
+      "provisions": "Điều 11",
+      "purpose": "Điều kiện, tỷ lệ và mức bình quân đối với quá trình bắt buộc kết hợp tự nguyện."
+    },
+    {
+      "document": "Thông tư 12/2025/TT-BNV",
+      "provisions": "Công thức mức bình quân tiền lương làm căn cứ đóng BHXH",
+      "purpose": "Công thức bình quân lương Nhà nước, lương doanh nghiệp và quá trình hỗn hợp."
+    },
+    {
+      "document": "Nghị định 135/2020/NĐ-CP",
+      "provisions": "Lộ trình tuổi nghỉ hưu",
+      "purpose": "Xác định tuổi nghỉ hưu theo năm nghỉ."
+    },
+    {
+      "document": "Công văn 340/BHXH-CSXH ngày 03/02/2026",
+      "provisions": "Hệ số điều chỉnh năm 2026",
+      "purpose": "Điều chỉnh tiền lương và thu nhập tháng đã đóng BHXH khi giải quyết trong năm 2026."
+    }
+  ]
+}

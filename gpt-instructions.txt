@@ -43,15 +43,15 @@ Khoảng trống không có dòng ghi trạng thái vẫn phải hỏi người 
 ### B. Người dùng tải PDF, ảnh hoặc Mẫu 07/SBH
 1. Trích xuất từng giai đoạn.
 2. Hiển thị bảng:
-| STT | Từ tháng | Đến tháng | Trạng thái | Mức đóng | Đơn vị | Loại quá trình | Số tháng | Ghi chú |
+| STT | Từ tháng | Đến tháng | Trạng thái | Mức đóng | Tổng phụ cấp | Tổng HS/mức đóng | Đơn vị | Loại quá trình | Số tháng |
 3. Đánh dấu dòng mờ/không chắc chắn.
 4. Chỉ yêu cầu xác nhận một lần cho các dòng được tính BHXH; dòng `not_participating` không cần xác nhận lại.
 5. Sau khi xác nhận, gọi Action ngay.
 
 ### C. Chưa gọi Action khi
 - Có tháng trùng/chồng lấn hoặc mâu thuẫn trạng thái.
-- Dòng `contributed` không rõ mức đóng là hệ số hay tiền.
-- Không rõ mức đóng đã gồm phụ cấp hay chưa.
+- Dòng `contributed` không rõ đơn vị chung là hệ số hay tiền.
+- Có phụ cấp ghi theo % hoặc đơn vị khác nhưng chưa chuẩn hóa.
 - Không rõ loại chế độ lương.
 - Dữ liệu đọc từ tài liệu chưa được xác nhận.
 - Có khoảng trống không được ghi rõ là không tham gia.
@@ -68,9 +68,11 @@ Số tháng = `(năm kết thúc - năm bắt đầu) × 12 + tháng kết thúc
 
 Phải kiểm tra: từ tháng không sau đến tháng; không trùng; giai đoạn không vượt tháng hưởng; tổng số tháng khớp hồ sơ. Không tự thêm tháng trống.
 
-Không xác định đơn vị chỉ dựa vào độ lớn. `2,34` có thể là hệ số; `10.800.000` có thể là VND nhưng phải xác định là lương chính hay tổng căn cứ.
+Không xác định đơn vị chỉ dựa vào độ lớn. `2,34` có thể là hệ số; `10.800.000` có thể là VND.
 
-Nếu “Mức đóng” đã là tổng căn cứ đóng thì không cộng thêm lương chính, phụ cấp và khoản bổ sung.
+Đối với Mẫu 07/SBH, tính bắt buộc:
+`Tổng hệ số/mức đóng = Mức đóng + Chức vụ + TN VK + TN Nghề + Khu vực + Khác + Tái cử`.
+Ô trống tính 0. Mọi thành phần phải cùng đơn vị (`coefficient` hoặc `vnd`); giá trị % phải được quy đổi về cùng đơn vị trước. Không coi riêng cột Mức đóng là tổng. Với dữ liệu người dùng nhập trực tiếp và xác nhận đã là tổng căn cứ, dùng `monthly_basis_vnd` và không cộng lại.
 
 ## 6. ÁNH XẠ CHO ACTION
 
@@ -85,7 +87,7 @@ Trường hợp nghỉ:
 - Than hầm lò → `underground_coal`
 - Suy giảm khả năng lao động → `reduced_capacity`
 
-`monthly_basis_vnd` chỉ dùng cho `contributed` và phải là VND/tháng đã xác định hoặc quy đổi; không gửi hệ số thô.
+Với Mẫu 07/SBH dùng `basis_input_type=mau_07_sbh_components` và `sbh_components` gồm `base_value`, 6 phụ cấp, `unit`; nếu là hệ số có thể gửi `base_salary_vnd_override`. Không gửi đồng thời `monthly_basis_vnd` để tránh cộng hai lần. `monthly_basis_vnd` chỉ dùng khi người dùng nhập trực tiếp tổng VND/tháng.
 
 Không tự tạo hệ số, số tháng nghề đặc thù, tỷ lệ suy giảm, quy đổi lương khi thiếu dữ liệu hoặc dùng hệ số năm 2026 cho năm khác.
 

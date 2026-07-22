@@ -11,6 +11,7 @@ from dateutil.relativedelta import relativedelta
 
 from .models import (
     AverageBasisResult,
+    BasisComponentAudit,
     BasisInputType,
     CapabilitiesResponse,
     ConfirmationStatus,
@@ -27,6 +28,7 @@ from .models import (
     ParticipationStatus,
     RetirementCase,
     SourceDocumentType,
+    SbhComponentUnit,
     YearlyAdjustmentBreakdown,
     EligibilityResult,
 )
@@ -36,6 +38,7 @@ from .rules import (
     LEGAL_REFERENCES,
     LEGAL_RULE_VERSION,
     age_after_offset,
+    base_salary_for_month,
     coefficient_for_year,
     earliest_threshold_for_schedule,
     state_average_years,
@@ -57,6 +60,9 @@ class MonthlyRecord:
     qualifying_hazardous: bool
     qualifying_especially_hazardous: bool
     qualifying_underground_coal: bool
+    component_unit: SbhComponentUnit | None = None
+    total_component_value: Decimal | None = None
+    base_salary_used_vnd: Decimal | None = None
 
     @property
     def included_in_average(self) -> bool:
@@ -100,15 +106,55 @@ def rounded_years_for_rate(total_months: int) -> Decimal:
     return Decimal(years) + fraction
 
 
-def resolve_period_basis(period) -> Decimal | None:
+@dataclass(frozen=True)
+class ResolvedBasis:
+    amount_vnd: Decimal | None
+    component_unit: SbhComponentUnit | None = None
+    total_component_value: Decimal | None = None
+    base_salary_used_vnd: Decimal | None = None
+
+
+def resolve_period_basis(period, month: date, request: PensionRequest) -> ResolvedBasis:
     if period.participation_status != ParticipationStatus.contributed:
-        return None
+        return ResolvedBasis(None)
     if period.monthly_basis_vnd is not None:
-        return period.monthly_basis_vnd
+        return ResolvedBasis(period.monthly_basis_vnd)
     if period.basis_input_type == BasisInputType.component_sum_vnd and period.basis_components:
         total = period.basis_components.total()
-        return total if total > 0 else None
-    return None
+        return ResolvedBasis(total if total > 0 else None)
+    if (
+        period.basis_input_type == BasisInputType.mau_07_sbh_components
+        and period.sbh_components is not None
+    ):
+        components = period.sbh_components
+        total = components.total_component_value()
+        if components.unit == SbhComponentUnit.vnd:
+            return ResolvedBasis(
+                total if total > 0 else None,
+                component_unit=components.unit,
+                total_component_value=total,
+            )
+
+        base_salary = components.base_salary_vnd_override
+        if base_salary is None and period.contribution_type == ContributionType.compulsory_state:
+            if month.year < 2016:
+                pension_month = parse_year_month(request.pension_start_month)
+                base_salary = request.reference_level_vnd or base_salary_for_month(pension_month)
+            else:
+                base_salary = base_salary_for_month(month)
+        if base_salary is None:
+            return ResolvedBasis(
+                None,
+                component_unit=components.unit,
+                total_component_value=total,
+            )
+        return ResolvedBasis(
+            total * base_salary,
+            component_unit=components.unit,
+            total_component_value=total,
+            base_salary_used_vnd=base_salary,
+        )
+    return ResolvedBasis(None)
 
 
 def validate_contribution_history(request: PensionRequest) -> HistoryValidationResult:
@@ -189,22 +235,48 @@ def validate_contribution_history(request: PensionRequest) -> HistoryValidationR
                     code="BASIS_NOT_NORMALIZED_TO_VND",
                     severity="error",
                     message_vi=(
-                        f"Dòng {row_id} chưa có mức căn cứ đóng bằng đồng Việt Nam; "
-                        "không được gửi hệ số lương thô để tính."
+                        f"Dòng {row_id} chưa có mức căn cứ đóng hợp lệ. Nếu đọc từ Mẫu 07/SBH, "
+                        "hãy dùng mau_07_sbh_components và nhập Mức đóng cùng 6 cột phụ cấp."
                     ),
                     source_row_id=row_id,
                     from_month=period.from_month,
                     to_month=period.to_month,
                 ))
-            elif resolve_period_basis(period) is None:
-                issues.append(HistoryIssue(
-                    code="MISSING_MONTHLY_BASIS",
-                    severity="error",
-                    message_vi=f"Dòng {row_id} thiếu tổng mức làm căn cứ đóng BHXH.",
-                    source_row_id=row_id,
-                    from_month=period.from_month,
-                    to_month=period.to_month,
-                ))
+            else:
+                resolved_start = resolve_period_basis(period, start, request)
+                resolved_end = resolve_period_basis(period, end, request)
+                if resolved_start.amount_vnd is None or resolved_end.amount_vnd is None:
+                    issues.append(HistoryIssue(
+                        code="MISSING_MONTHLY_BASIS",
+                        severity="error",
+                        message_vi=(
+                            f"Dòng {row_id} chưa tính được tổng mức đóng BHXH. Công thức Mẫu 07/SBH: "
+                            "Mức đóng + Chức vụ + TN VK + TN Nghề + Khu vực + Khác + Tái cử."
+                        ),
+                        source_row_id=row_id,
+                        from_month=period.from_month,
+                        to_month=period.to_month,
+                    ))
+                if (
+                    period.basis_input_type == BasisInputType.mau_07_sbh_components
+                    and period.sbh_components is not None
+                    and period.sbh_components.unit == SbhComponentUnit.vnd
+                    and period.contribution_type == ContributionType.compulsory_state
+                    and start.year < 2016
+                    and not request.state_salary_values_are_converted
+                ):
+                    issues.append(HistoryIssue(
+                        code="STATE_PRE2016_VND_NOT_MARKED_CONVERTED",
+                        severity="error",
+                        message_vi=(
+                            f"Dòng {row_id} là lương Nhà nước trước năm 2016 nhập bằng VND nhưng chưa "
+                            "xác nhận đã quy đổi theo mức tham chiếu. Có thể nhập các thành phần bằng hệ số "
+                            "hoặc đặt state_salary_values_are_converted=true sau khi đã quy đổi."
+                        ),
+                        source_row_id=row_id,
+                        from_month=period.from_month,
+                        to_month=period.to_month,
+                    ))
 
         if start >= pension_start or end >= pension_start:
             issues.append(HistoryIssue(
@@ -309,32 +381,114 @@ def validate_contribution_history(request: PensionRequest) -> HistoryValidationR
 def expand_contributions(request: PensionRequest) -> list[MonthlyRecord]:
     rows: list[MonthlyRecord] = []
     seen: set[tuple[int, int]] = set()
-    for period in request.contributions:
+    for index, period in enumerate(request.contributions, start=1):
         if period.participation_status == ParticipationStatus.not_participating:
             continue
         if period.contribution_type is None:
             continue
-        basis = resolve_period_basis(period)
         current = parse_year_month(period.from_month)
         end = parse_year_month(period.to_month)
+        row_id = period.source_row_id or str(index)
         while current <= end:
             key = (current.year, current.month)
             if key not in seen:
                 seen.add(key)
+                resolved = resolve_period_basis(period, current, request)
                 rows.append(MonthlyRecord(
                     month=current,
-                    basis=basis,
+                    basis=resolved.amount_vnd,
                     contribution_type=period.contribution_type,
                     participation_status=period.participation_status,
                     basis_input_type=period.basis_input_type,
                     coefficient_override=period.coefficient_override,
-                    source_row_id=period.source_row_id,
+                    source_row_id=row_id,
                     qualifying_hazardous=period.qualifying_hazardous,
                     qualifying_especially_hazardous=period.qualifying_especially_hazardous,
                     qualifying_underground_coal=period.qualifying_underground_coal,
+                    component_unit=resolved.component_unit,
+                    total_component_value=resolved.total_component_value,
+                    base_salary_used_vnd=resolved.base_salary_used_vnd,
                 ))
             current = next_month(current)
     return sorted(rows, key=lambda r: r.month)
+
+
+def build_basis_component_audit(
+    request: PensionRequest, rows: list[MonthlyRecord]
+) -> list[BasisComponentAudit]:
+    rows_by_source: dict[str, list[MonthlyRecord]] = defaultdict(list)
+    for row in rows:
+        if row.source_row_id:
+            rows_by_source[row.source_row_id].append(row)
+
+    audits: list[BasisComponentAudit] = []
+    for index, period in enumerate(request.contributions, start=1):
+        if (
+            period.participation_status != ParticipationStatus.contributed
+            or period.basis_input_type != BasisInputType.mau_07_sbh_components
+            or period.sbh_components is None
+        ):
+            continue
+        row_id = period.source_row_id or str(index)
+        period_rows = rows_by_source.get(row_id, [])
+        basis_values = [r.basis for r in period_rows if r.basis is not None]
+        base_salaries = sorted({
+            r.base_salary_used_vnd
+            for r in period_rows
+            if r.base_salary_used_vnd is not None
+        })
+        c = period.sbh_components
+        allowance_total = c.allowance_total()
+        total = c.total_component_value()
+        component_formula = (
+            f"{c.base_value} + {c.position_allowance} + "
+            f"{c.seniority_beyond_frame_allowance} + "
+            f"{c.professional_seniority_allowance} + {c.regional_allowance} + "
+            f"{c.other_allowance} + {c.reelection_allowance} = {total}"
+        )
+        if c.unit == SbhComponentUnit.vnd:
+            formula = component_formula + " đồng/tháng"
+        elif len(base_salaries) == 1:
+            formula = (
+                component_formula
+                + f" tổng hệ số; {total} × {base_salaries[0]} = "
+                + f"{(total * base_salaries[0]).quantize(MONEY, rounding=ROUND_HALF_UP)} đồng/tháng"
+            )
+        elif base_salaries:
+            formula = (
+                component_formula
+                + " tổng hệ số; nhân mức lương cơ sở tương ứng từng tháng: "
+                + ", ".join(str(v) for v in base_salaries)
+            )
+        else:
+            formula = component_formula + " tổng hệ số; chưa xác định lương cơ sở để quy đổi"
+
+        audits.append(BasisComponentAudit(
+            source_row_id=row_id,
+            from_month=period.from_month,
+            to_month=period.to_month,
+            component_unit=c.unit,
+            base_value=c.base_value,
+            position_allowance=c.position_allowance,
+            seniority_beyond_frame_allowance=c.seniority_beyond_frame_allowance,
+            professional_seniority_allowance=c.professional_seniority_allowance,
+            regional_allowance=c.regional_allowance,
+            other_allowance=c.other_allowance,
+            reelection_allowance=c.reelection_allowance,
+            allowance_total=allowance_total,
+            total_component_value=total,
+            base_salary_values_used_vnd=base_salaries,
+            monthly_basis_min_vnd=(
+                min(basis_values).quantize(MONEY, rounding=ROUND_HALF_UP)
+                if basis_values else None
+            ),
+            monthly_basis_max_vnd=(
+                max(basis_values).quantize(MONEY, rounding=ROUND_HALF_UP)
+                if basis_values else None
+            ),
+            formula_vi=formula,
+        ))
+    return audits
 
 
 def base_rate(sex: str, years: Decimal) -> Decimal:
@@ -410,7 +564,16 @@ def adjust_record(
         return row.basis * coeff, coeff
 
     if row.month.year < 2016:
-        if not state_values_converted and row.basis_input_type != BasisInputType.converted_state_vnd:
+        coefficient_components_converted = (
+            row.basis_input_type == BasisInputType.mau_07_sbh_components
+            and row.component_unit == SbhComponentUnit.coefficient
+            and row.base_salary_used_vnd is not None
+        )
+        if (
+            not state_values_converted
+            and row.basis_input_type != BasisInputType.converted_state_vnd
+            and not coefficient_components_converted
+        ):
             raise ValueError(
                 "Tháng lương Nhà nước trước năm 2016 được dùng tính bình quân nhưng chưa được quy đổi theo quy định."
             )
@@ -750,6 +913,7 @@ def calculate_pension(request: PensionRequest) -> PensionResponse:
     calculation_id = str(uuid4())
     history = validate_contribution_history(request)
     rows = expand_contributions(request)
+    basis_component_audit = build_basis_component_audit(request, rows)
     total = len(rows)
     compulsory = sum(1 for r in rows if r.contribution_type != ContributionType.voluntary)
     voluntary = total - compulsory
@@ -793,6 +957,7 @@ def calculate_pension(request: PensionRequest) -> PensionResponse:
         "Mỗi khoảng đóng bao gồm cả tháng bắt đầu và tháng kết thúc.",
         "Dòng ghi rõ không tham gia BHXH được loại khỏi cả thời gian và mức bình quân.",
         "Giai đoạn credited_duration_only chỉ cộng thời gian hưởng, không đưa mức lương vào bình quân.",
+        "Với Mẫu 07/SBH dùng thành phần, tổng hệ số/mức đóng bằng Mức đóng + Chức vụ + TN VK + TN Nghề + Khu vực + Khác + Tái cử.",
     ]
     warnings = [
         "Kết quả là ước tính; hồ sơ được cơ quan BHXH xác nhận và quy định có hiệu lực tại thời điểm giải quyết là căn cứ cuối cùng."
@@ -828,6 +993,7 @@ def calculate_pension(request: PensionRequest) -> PensionResponse:
             contribution_summary=summary,
             eligibility=eligibility,
             average_basis=empty_average(request),
+            basis_component_audit=basis_component_audit,
             pension_rate=empty_rate(),
             estimated_monthly_pension_vnd=None,
             pension_calculation_formula=None,
@@ -965,6 +1131,7 @@ def calculate_pension(request: PensionRequest) -> PensionResponse:
         contribution_summary=summary,
         eligibility=eligibility,
         average_basis=average_result,
+        basis_component_audit=basis_component_audit,
         pension_rate=rate_result,
         estimated_monthly_pension_vnd=estimated_pension,
         pension_calculation_formula=pension_formula,
@@ -980,7 +1147,7 @@ def calculate_pension(request: PensionRequest) -> PensionResponse:
 def capabilities() -> CapabilitiesResponse:
     return CapabilitiesResponse(
         service="calculatePension",
-        version="2.1.0",
+        version="2.2.0",
         legal_rule_version=LEGAL_RULE_VERSION,
         built_in_coefficient_years=[2026],
         supported_retirement_cases=[
@@ -992,7 +1159,7 @@ def capabilities() -> CapabilitiesResponse:
         manual_review_cases=[RetirementCase.occupational_hiv, RetirementCase.armed_forces],
         supported_source_documents=list(SourceDocumentType),
         notes=[
-            "Mẫu 07/SBH phải được chuẩn hóa thành tiền VND/tháng trước khi tính.",
+            "Mẫu 07/SBH có thể gửi theo thành phần; API cộng Mức đóng và 6 cột phụ cấp rồi quy đổi sang VND/tháng.",
             "Bộ hệ số tích hợp sẵn chỉ áp dụng cho năm hưởng 2026.",
             "Dòng ghi rõ không tham gia BHXH được tự động loại khỏi thời gian và mức bình quân.",
             "Thời gian được công nhận trước 01/01/1995 nhưng không có lương/sinh hoạt phí dùng credited_duration_only: cộng thời gian, không tính bình quân.",
