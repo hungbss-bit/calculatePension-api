@@ -2,11 +2,11 @@
   "openapi": "3.1.0",
   "info": {
     "title": "API calculatePension - Tính lương hưu BHXH",
-    "description": "API dự tính lương hưu BHXH Việt Nam, hỗ trợ dữ liệu chuẩn hóa từ Mẫu 07/SBH, kiểm tra tháng trống/trùng, trạng thái không tham gia, thời gian chỉ cộng thời gian, tổng hợp Mức đóng và 6 cột phụ cấp của Mẫu 07/SBH, quá trình hỗn hợp và bộ hệ số theo năm hưởng. Kết quả chỉ mang tính tham khảo.",
+    "description": "API dự tính lương hưu BHXH Việt Nam, hỗ trợ dữ liệu chuẩn hóa từ Mẫu 07/SBH, kiểm tra tháng trống/trùng, trạng thái không tham gia, thời gian chỉ cộng thời gian, tổng hợp Mức đóng và 6 cột phụ cấp của Mẫu 07/SBH, quá trình hỗn hợp và bộ hệ số theo năm hưởng. Hỗ trợ xác nhận nghề nặng nhọc và chính sách nghỉ trước tuổi không giảm tỷ lệ; không áp dụng cho lực lượng vũ trang. Kết quả chỉ mang tính tham khảo.",
     "contact": {
       "name": "Quản trị viên calculatePension"
     },
-    "version": "2.2.0"
+    "version": "2.3.0"
   },
   "paths": {
     "/health": {
@@ -27,6 +27,40 @@
                   },
                   "type": "object",
                   "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/authDiagnostics": {
+      "get": {
+        "tags": [
+          "Hệ thống"
+        ],
+        "summary": "Chẩn đoán header X-API-Key an toàn",
+        "description": "Chỉ hoạt động khi AUTH_DIAGNOSTICS_ENABLED=true. Không trả khóa bí mật; chỉ trả độ dài, dấu vân tay SHA-256 rút gọn và kết quả so khớp để chẩn đoán cấu hình Render/GPT.",
+        "operationId": "checkApiKeyDiagnostics",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Checkapikeydiagnostics"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -55,7 +89,7 @@
         },
         "security": [
           {
-            "APIKeyHeader": []
+            "CalculatePensionApiKey": []
           }
         ]
       }
@@ -102,7 +136,7 @@
         },
         "security": [
           {
-            "APIKeyHeader": []
+            "CalculatePensionApiKey": []
           }
         ]
       }
@@ -149,7 +183,7 @@
         },
         "security": [
           {
-            "APIKeyHeader": []
+            "CalculatePensionApiKey": []
           }
         ]
       }
@@ -519,6 +553,18 @@
             "type": "array",
             "title": "Supported Source Documents"
           },
+          "supported_early_retirement_policies": {
+            "items": {
+              "$ref": "#/components/schemas/EarlyRetirementPolicyCode"
+            },
+            "type": "array",
+            "title": "Supported Early Retirement Policies"
+          },
+          "armed_forces_supported": {
+            "type": "boolean",
+            "title": "Armed Forces Supported",
+            "default": false
+          },
           "notes": {
             "items": {
               "type": "string"
@@ -715,6 +761,58 @@
             ],
             "title": "Note"
           },
+          "hazardous_match_status": {
+            "$ref": "#/components/schemas/HazardousMatchStatus",
+            "default": "not_evaluated"
+          },
+          "hazardous_catalog_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hazardous Catalog Code"
+          },
+          "hazardous_catalog_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hazardous Catalog Title"
+          },
+          "hazardous_class": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HazardousClass"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hazardous_legal_document": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hazardous Legal Document"
+          },
+          "hazardous_user_confirmed": {
+            "type": "boolean",
+            "title": "Hazardous User Confirmed",
+            "default": false
+          },
           "qualifying_hazardous": {
             "type": "boolean",
             "title": "Qualifying Hazardous",
@@ -802,6 +900,199 @@
           "pre1995_no_salary_or_living_allowance"
         ],
         "title": "DurationOnlyReason"
+      },
+      "EarlyRetirementPolicyCode": {
+        "type": "string",
+        "enum": [
+          "nd154_2025_streamlining",
+          "nd178_2024_nd67_2025_restructuring",
+          "nd177_2024_non_reappointment",
+          "other_no_reduction"
+        ],
+        "title": "EarlyRetirementPolicyCode"
+      },
+      "EarlyRetirementPolicyEvidence": {
+        "properties": {
+          "policy_code": {
+            "$ref": "#/components/schemas/EarlyRetirementPolicyCode"
+          },
+          "legal_document_number": {
+            "type": "string",
+            "title": "Số nghị định/quyết định áp dụng",
+            "description": "Ví dụ 154/2025/NĐ-CP hoặc quyết định nghỉ hưu của cấp có thẩm quyền."
+          },
+          "age_reference": {
+            "$ref": "#/components/schemas/RetirementAgeReference",
+            "default": "normal_schedule"
+          },
+          "competent_authority_decision_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Competent Authority Decision Number"
+          },
+          "competent_authority_decision_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Competent Authority Decision Date"
+          },
+          "approved_by_competent_authority": {
+            "type": "boolean",
+            "title": "Approved By Competent Authority",
+            "default": false
+          },
+          "no_reduction_confirmed": {
+            "type": "boolean",
+            "title": "No Reduction Confirmed",
+            "default": false
+          },
+          "confirmation_status": {
+            "$ref": "#/components/schemas/ConfirmationStatus",
+            "default": "unconfirmed"
+          },
+          "custom_maximum_early_months": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 240.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Maximum Early Months"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "policy_code",
+          "legal_document_number"
+        ],
+        "title": "Căn cứ nghỉ hưu trước tuổi không giảm tỷ lệ"
+      },
+      "EarlyRetirementPolicyResult": {
+        "properties": {
+          "policy_code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EarlyRetirementPolicyCode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "legal_document_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Document Number"
+          },
+          "age_reference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RetirementAgeReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference_threshold_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Threshold Date"
+          },
+          "early_retirement_months": {
+            "type": "integer",
+            "title": "Early Retirement Months",
+            "default": 0
+          },
+          "maximum_early_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum Early Months"
+          },
+          "no_reduction_applied": {
+            "type": "boolean",
+            "title": "No Reduction Applied",
+            "default": false
+          },
+          "approved_by_competent_authority": {
+            "type": "boolean",
+            "title": "Approved By Competent Authority",
+            "default": false
+          },
+          "decision_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Number"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "title": "EarlyRetirementPolicyResult"
       },
       "EligibilityResult": {
         "properties": {
@@ -905,6 +1196,123 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HazardousClass": {
+        "type": "string",
+        "enum": [
+          "IV",
+          "V",
+          "VI"
+        ],
+        "title": "HazardousClass"
+      },
+      "HazardousMatchStatus": {
+        "type": "string",
+        "enum": [
+          "not_evaluated",
+          "candidate",
+          "confirmed",
+          "rejected"
+        ],
+        "title": "HazardousMatchStatus"
+      },
+      "HazardousMatchedPeriod": {
+        "properties": {
+          "source_row_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Row Id"
+          },
+          "from_month": {
+            "type": "string",
+            "title": "From Month"
+          },
+          "to_month": {
+            "type": "string",
+            "title": "To Month"
+          },
+          "months": {
+            "type": "integer",
+            "title": "Months"
+          },
+          "catalog_code": {
+            "type": "string",
+            "title": "Catalog Code"
+          },
+          "catalog_title": {
+            "type": "string",
+            "title": "Catalog Title"
+          },
+          "hazardous_class": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HazardousClass"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "legal_document": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Document"
+          }
+        },
+        "type": "object",
+        "required": [
+          "from_month",
+          "to_month",
+          "months",
+          "catalog_code",
+          "catalog_title"
+        ],
+        "title": "HazardousMatchedPeriod"
+      },
+      "HazardousSummary": {
+        "properties": {
+          "confirmed_hazardous_months": {
+            "type": "integer",
+            "title": "Confirmed Hazardous Months",
+            "default": 0
+          },
+          "confirmed_especially_hazardous_months": {
+            "type": "integer",
+            "title": "Confirmed Especially Hazardous Months",
+            "default": 0
+          },
+          "confirmed_underground_coal_months": {
+            "type": "integer",
+            "title": "Confirmed Underground Coal Months",
+            "default": 0
+          },
+          "exact_hazardous_duration": {
+            "type": "string",
+            "title": "Exact Hazardous Duration",
+            "default": "0 năm 0 tháng"
+          },
+          "confirmed_periods": {
+            "items": {
+              "$ref": "#/components/schemas/HazardousMatchedPeriod"
+            },
+            "type": "array",
+            "title": "Confirmed Periods"
+          }
+        },
+        "type": "object",
+        "title": "HazardousSummary"
       },
       "HistoryIssue": {
         "properties": {
@@ -1356,6 +1764,16 @@
             "title": "Underground Coal Months",
             "default": 0
           },
+          "early_retirement_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EarlyRetirementPolicyEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "state_salary_values_are_converted": {
             "type": "boolean",
             "title": "State Salary Values Are Converted",
@@ -1473,6 +1891,19 @@
           },
           "contribution_summary": {
             "$ref": "#/components/schemas/ContributionSummary"
+          },
+          "hazardous_summary": {
+            "$ref": "#/components/schemas/HazardousSummary"
+          },
+          "early_retirement_policy_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EarlyRetirementPolicyResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "eligibility": {
             "$ref": "#/components/schemas/EligibilityResult"
@@ -1602,6 +2033,14 @@
         ],
         "title": "Thông tin cá nhân"
       },
+      "RetirementAgeReference": {
+        "type": "string",
+        "enum": [
+          "normal_schedule",
+          "hazardous_schedule"
+        ],
+        "title": "RetirementAgeReference"
+      },
       "RetirementCase": {
         "type": "string",
         "enum": [
@@ -1609,6 +2048,7 @@
           "hazardous_or_special_region",
           "underground_coal",
           "reduced_capacity",
+          "policy_no_reduction",
           "occupational_hiv",
           "armed_forces"
         ],
@@ -1729,8 +2169,9 @@
       }
     },
     "securitySchemes": {
-      "APIKeyHeader": {
+      "CalculatePensionApiKey": {
         "type": "apiKey",
+        "description": "Khóa bí mật dùng cho GPT Action, gửi qua header X-API-Key.",
         "in": "header",
         "name": "X-API-Key"
       }

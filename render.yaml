@@ -12,3 +12,7 @@ services:
         value: 3.13.5
       - key: API_KEY
         sync: false
+      - key: REQUIRE_API_KEY
+        value: "true"
+      - key: AUTH_DIAGNOSTICS_ENABLED
+        value: "false"

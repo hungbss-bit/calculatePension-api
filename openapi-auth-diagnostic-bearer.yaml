@@ -1,0 +1,30 @@
+openapi: 3.1.0
+info:
+  title: calculatePension Auth Diagnostic
+  version: 2.2.1
+servers:
+- url: https://calculatepension-api.onrender.com
+paths:
+  /health:
+    get:
+      operationId: checkPensionApiHealth
+      summary: Kiểm tra API công khai
+      responses:
+        '200':
+          description: OK
+  /v1/capabilities:
+    get:
+      operationId: getPensionCapabilities
+      summary: Kiểm tra Bearer API key
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Đã xác thực
+        '401':
+          description: Sai hoặc thiếu Bearer API key
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer

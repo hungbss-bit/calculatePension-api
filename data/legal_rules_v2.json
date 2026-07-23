@@ -1,19 +1,23 @@
 {
-  "version": "2.2.0",
-  "legal_rule_version": "VN-LBHXH-41/2024-QH15@2025-07-01+ND158/2025/ND-CP+ND159/2025/ND-CP+TT12/2025/TT-BNV+ND135/2020/ND-CP+BHXH-340/CSXH-2026+PRE1995-NO-SALARY-DURATION-ONLY+MAU07-COMPONENT-SUM-V2",
+  "version": "2.3.0",
+  "legal_rule_version": "VN-LBHXH-41/2024-QH15@2025-07-01+ND158/2025/ND-CP+ND159/2025/ND-CP+TT12/2025/TT-BNV+ND135/2020/ND-CP+BHXH-340/CSXH-2026+TT11/2020+TT19/2023+ND154/2025+ND178/2024+ND67/2025+ND177/2024+HAZARDOUS-CONFIRMATION-V1",
   "built_in_coefficient_years": [
     2026
   ],
   "principles": {
     "normal_minimum_total_months": 180,
-    "compulsory_policy_minimum_compulsory_months": 180,
-    "reduced_capacity_minimum_compulsory_months": 240,
+    "hazardous_minimum_confirmed_months": 180,
+    "hazardous_match_must_be_user_confirmed": true,
+    "hazardous_raw_total_is_not_source_of_truth": true,
     "maximum_pension_rate_percent": 75,
     "coefficient_year_must_equal_benefit_year": true,
-    "explicit_non_participation_is_excluded": true,
-    "duration_only_requires_pre1995_no_salary_reason": true,
-    "average_basis_is_returned_before_rate": true,
     "mau_07_sbh_total_basis_formula": "Mức đóng + Chức vụ + TN VK + TN Nghề + Khu vực + Khác + Tái cử",
-    "prevent_double_counting_monthly_basis_and_components": true
+    "armed_forces_supported": false,
+    "no_reduction_policies": [
+      "nd154_2025_streamlining",
+      "nd178_2024_nd67_2025_restructuring",
+      "nd177_2024_non_reappointment",
+      "other_no_reduction"
+    ]
   }
 }

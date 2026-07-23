@@ -1,0 +1,42 @@
+{
+  "person": {
+    "date_of_birth": "1975-09-01",
+    "sex": "female"
+  },
+  "pension_start_month": "2026-10",
+  "retirement_case": "hazardous_or_special_region",
+  "source_document_type": "mau_07_sbh",
+  "history_confirmed": true,
+  "gaps_confirmed_as_non_contribution": true,
+  "contributions": [
+    {
+      "from_month": "2006-10",
+      "to_month": "2021-09",
+      "participation_status": "contributed",
+      "monthly_basis_vnd": 10000000,
+      "contribution_type": "compulsory_employer",
+      "basis_input_type": "total_vnd",
+      "hazardous_match_status": "confirmed",
+      "hazardous_catalog_code": "DM-0008",
+      "hazardous_catalog_title": "Khoan khai thác đá bằng búa máy cầm tay",
+      "hazardous_class": "V",
+      "hazardous_legal_document": "11/2020/TT-BLĐTBXH",
+      "hazardous_user_confirmed": true,
+      "qualifying_hazardous": true,
+      "qualifying_especially_hazardous": true,
+      "confirmation_status": "confirmed"
+    },
+    {
+      "from_month": "2021-10",
+      "to_month": "2026-09",
+      "participation_status": "contributed",
+      "monthly_basis_vnd": 10000000,
+      "contribution_type": "compulsory_employer",
+      "basis_input_type": "total_vnd",
+      "confirmation_status": "confirmed"
+    }
+  ],
+  "adjustment": {
+    "coefficient_year": 2026
+  }
+}

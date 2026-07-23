@@ -37,5 +37,23 @@
     "formula": "Mức đóng + Chức vụ + TN VK + TN Nghề + Khu vực + Khác + Tái cử",
     "api_basis_input_type": "mau_07_sbh_components",
     "api_field": "contributions[].sbh_components"
+  },
+  "hazardous_workflow": {
+    "source_column": "Cấp bậc, chức vụ, chức danh nghề, công việc, nơi làm việc",
+    "knowledge_file": "Danh_muc_nghe_nang_nhoc_doc_hai_hien_hanh_2026.xlsx",
+    "current_sheet": "Danh_muc_hien_hanh",
+    "historical_sheet": "Van_ban_da_loai",
+    "excluded_sheet": "Quan_doi_TT28",
+    "candidate_requires_user_confirmation": true,
+    "api_fields": [
+      "hazardous_match_status",
+      "hazardous_catalog_code",
+      "hazardous_catalog_title",
+      "hazardous_class",
+      "hazardous_legal_document",
+      "hazardous_user_confirmed",
+      "qualifying_hazardous",
+      "qualifying_especially_hazardous"
+    ]
   }
 }

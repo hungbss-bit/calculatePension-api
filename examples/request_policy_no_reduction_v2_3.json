@@ -1,0 +1,35 @@
+{
+  "person": {
+    "date_of_birth": "1972-09-01",
+    "sex": "female"
+  },
+  "pension_start_month": "2026-10",
+  "retirement_case": "policy_no_reduction",
+  "source_document_type": "direct_input",
+  "history_confirmed": true,
+  "gaps_confirmed_as_non_contribution": true,
+  "early_retirement_policy": {
+    "policy_code": "nd154_2025_streamlining",
+    "legal_document_number": "154/2025/NĐ-CP",
+    "age_reference": "normal_schedule",
+    "competent_authority_decision_number": "123/QĐ-UBND",
+    "competent_authority_decision_date": "2026-09-01",
+    "approved_by_competent_authority": true,
+    "no_reduction_confirmed": true,
+    "confirmation_status": "confirmed"
+  },
+  "contributions": [
+    {
+      "from_month": "2006-10",
+      "to_month": "2026-09",
+      "participation_status": "contributed",
+      "monthly_basis_vnd": 10000000,
+      "contribution_type": "compulsory_employer",
+      "basis_input_type": "total_vnd",
+      "confirmation_status": "confirmed"
+    }
+  ],
+  "adjustment": {
+    "coefficient_year": 2026
+  }
+}

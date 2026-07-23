@@ -1,15 +1,11 @@
 openapi: 3.1.0
 info:
-  title: calculatePension API
-  version: 2.2.0
-  description: >
-    Kiểm tra dữ liệu quá trình BHXH và dự tính lương hưu Việt Nam.
-    Dùng checkPensionApiHealth để kiểm tra kết nối, getPensionCapabilities
-    để kiểm tra phiên bản, validateContributionHistory để kiểm tra hồ sơ,
-    và calculatePension để tính kết quả.
+  title: calculatePension API v2.3.0 - Nghề nặng nhọc và nghỉ trước tuổi
+  version: 2.3.0
+  description: Kiểm tra quá trình BHXH, nghề nặng nhọc đã xác nhận và chính sách nghỉ hưu trước tuổi không giảm
+    tỷ lệ. Không hỗ trợ lực lượng vũ trang.
 servers:
-  - url: https://calculatepension-api.onrender.com
-
+- url: https://calculatepension-api.onrender.com
 paths:
   /health:
     get:
@@ -17,160 +13,221 @@ paths:
       summary: Kiểm tra API có đang hoạt động
       description: Gọi khi bắt đầu chẩn đoán Action hoặc khi một Action khác bị lỗi.
       responses:
-        "200":
+        '200':
           description: API đang hoạt động
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthResponse"
-
+                $ref: '#/components/schemas/HealthResponse'
   /v1/capabilities:
     get:
       operationId: getPensionCapabilities
       summary: Xem phiên bản và khả năng tính toán
-      description: >
-        Gọi sau checkPensionApiHealth để xác nhận API key, phiên bản API
-        và các trường hợp được hỗ trợ.
+      description: Xác nhận API key, phiên bản, trường hợp nghỉ hưu và chính sách hiện được hỗ trợ.
       security:
-        - APIKeyHeader: []
+      - CalculatePensionApiKeyV230: []
       responses:
-        "200":
+        '200':
           description: Thông tin khả năng API
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CapabilitiesResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
+                $ref: '#/components/schemas/CapabilitiesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ApiKeyNotConfigured'
   /v1/validateContributionHistory:
     post:
       operationId: validateContributionHistory
       summary: Kiểm tra quá trình tham gia BHXH
-      description: >
-        Dùng trước calculatePension khi dữ liệu được đọc từ PDF, ảnh hoặc Mẫu 07/SBH.
-        Kiểm tra tháng trống, tháng trùng, trạng thái tham gia, mức đóng và xác nhận dữ liệu.
+      description: Kiểm tra Mẫu 07/SBH đã xác nhận, tháng trống/trùng và ứng viên nghề nặng nhọc. BHTN phải loại
+        trước. Ứng viên nghề nặng nhọc phải được người dùng xác nhận.
       security:
-        - APIKeyHeader: []
+      - CalculatePensionApiKeyV230: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PensionRequest"
+              $ref: '#/components/schemas/PensionRequest'
       responses:
-        "200":
+        '200':
           description: Kết quả kiểm tra quá trình
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HistoryValidationResult"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "422":
-          $ref: "#/components/responses/ValidationError"
-
+                $ref: '#/components/schemas/HistoryValidationResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/ApiKeyNotConfigured'
   /v1/calculatePension:
     post:
       operationId: calculatePension
       summary: Dự tính lương hưu
-      description: >
-        Gọi khi đã có ngày sinh, giới tính, tháng bắt đầu hưởng, trường hợp nghỉ hưu
-        và quá trình BHXH hợp lệ. Trả mức bình quân, tỷ lệ hưởng và lương hưu dự tính.
+      description: Tính điều kiện, mức bình quân và lương hưu. Với nghỉ trước tuổi không giảm tỷ lệ, phải gửi chính
+        sách và quyết định của cấp có thẩm quyền. Không dùng cho lực lượng vũ trang.
       security:
-        - APIKeyHeader: []
+      - CalculatePensionApiKeyV230: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PensionRequest"
+              $ref: '#/components/schemas/PensionRequest'
             examples:
               doanhNghiep:
                 summary: Dữ liệu trực tiếp đã là tổng mức đóng VND
                 value:
                   person:
-                    date_of_birth: "1969-09-01"
+                    date_of_birth: '1969-09-01'
                     sex: female
-                  pension_start_month: "2026-10"
+                  pension_start_month: 2026-10
                   retirement_case: normal
                   source_document_type: direct_input
                   history_confirmed: true
                   gaps_confirmed_as_non_contribution: true
                   contributions:
-                    - from_month: "1996-10"
-                      to_month: "2026-09"
-                      participation_status: contributed
-                      contribution_type: compulsory_employer
-                      basis_input_type: total_vnd
-                      monthly_basis_vnd: 10800000
-                      confirmation_status: confirmed
+                  - from_month: 1996-10
+                    to_month: 2026-09
+                    participation_status: contributed
+                    contribution_type: compulsory_employer
+                    basis_input_type: total_vnd
+                    monthly_basis_vnd: 10800000
+                    confirmation_status: confirmed
                   adjustment:
                     coefficient_year: 2026
               mau07Sbh:
-                summary: Một dòng Mẫu 07/SBH dạng hệ số
+                summary: Mẫu 07/SBH lương Nhà nước dạng hệ số; API tự quy đổi sang VND
                 value:
                   person:
-                    date_of_birth: "1965-06-25"
+                    date_of_birth: '1971-10-15'
                     sex: male
-                  pension_start_month: "2026-12"
+                  pension_start_month: 2026-08
                   retirement_case: normal
                   source_document_type: mau_07_sbh
                   history_confirmed: true
                   gaps_confirmed_as_non_contribution: true
                   contributions:
-                    - from_month: "2026-07"
-                      to_month: "2026-11"
-                      participation_status: contributed
-                      contribution_type: compulsory_state
-                      basis_input_type: mau_07_sbh_components
-                      sbh_components:
-                        unit: coefficient
-                        base_value: 6.1
-                        position_allowance: 0.3
-                        seniority_beyond_frame_allowance: 0
-                        professional_seniority_allowance: 0
-                        regional_allowance: 0
-                        other_allowance: 0
-                        reelection_allowance: 0
-                        base_salary_vnd_override: 2530000
-                      source_row_id: "07-SBH-01"
-                      confirmation_status: confirmed
+                  - from_month: 2011-05
+                    to_month: 2011-10
+                    participation_status: contributed
+                    contribution_type: compulsory_state
+                    basis_input_type: mau_07_sbh_components
+                    sbh_components:
+                      unit: coefficient
+                      base_value: 3.99
+                      position_allowance: 0.25
+                      seniority_beyond_frame_allowance: 0
+                      professional_seniority_allowance: 0.5586
+                      regional_allowance: 0
+                      other_allowance: 0
+                      reelection_allowance: 0
+                    source_row_id: 07-SBH-2011-05
+                    confirmation_status: confirmed
+                  adjustment:
+                    coefficient_year: 2026
+              ngheNangNhocDaXacNhan:
+                summary: 15 năm nghề nặng nhọc đã đối chiếu danh mục và xác nhận
+                value:
+                  person:
+                    date_of_birth: '1975-09-01'
+                    sex: female
+                  pension_start_month: 2026-10
+                  retirement_case: hazardous_or_special_region
+                  source_document_type: mau_07_sbh
+                  history_confirmed: true
+                  gaps_confirmed_as_non_contribution: true
+                  contributions:
+                  - from_month: 2006-10
+                    to_month: 2021-09
+                    participation_status: contributed
+                    contribution_type: compulsory_employer
+                    basis_input_type: total_vnd
+                    monthly_basis_vnd: 10000000
+                    hazardous_match_status: confirmed
+                    hazardous_catalog_code: DM-0008
+                    hazardous_catalog_title: Khoan khai thác đá bằng búa máy cầm tay
+                    hazardous_class: V
+                    hazardous_legal_document: 11/2020/TT-BLĐTBXH
+                    hazardous_user_confirmed: true
+                    qualifying_hazardous: true
+                    qualifying_especially_hazardous: true
+                    confirmation_status: confirmed
+                  adjustment:
+                    coefficient_year: 2026
+              nghiTruocTuoiKhongGiam:
+                summary: Nghỉ trước tuổi theo Nghị định 154/2025 có quyết định phê duyệt
+                value:
+                  person:
+                    date_of_birth: '1972-09-01'
+                    sex: female
+                  pension_start_month: 2026-10
+                  retirement_case: policy_no_reduction
+                  source_document_type: direct_input
+                  history_confirmed: true
+                  gaps_confirmed_as_non_contribution: true
+                  early_retirement_policy:
+                    policy_code: nd154_2025_streamlining
+                    legal_document_number: 154/2025/NĐ-CP
+                    age_reference: normal_schedule
+                    competent_authority_decision_number: 123/QĐ-UBND
+                    competent_authority_decision_date: '2026-09-01'
+                    approved_by_competent_authority: true
+                    no_reduction_confirmed: true
+                    confirmation_status: confirmed
+                  contributions:
+                  - from_month: 2006-10
+                    to_month: 2026-09
+                    participation_status: contributed
+                    contribution_type: compulsory_employer
+                    basis_input_type: total_vnd
+                    monthly_basis_vnd: 10000000
+                    confirmation_status: confirmed
                   adjustment:
                     coefficient_year: 2026
       responses:
-        "200":
+        '200':
           description: Kết quả dự tính
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PensionResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "422":
-          $ref: "#/components/responses/ValidationError"
-
+                $ref: '#/components/schemas/PensionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/ApiKeyNotConfigured'
 components:
   securitySchemes:
-    APIKeyHeader:
+    CalculatePensionApiKeyV230:
       type: apiKey
       in: header
       name: X-API-Key
-
+      description: Nhập đúng giá trị API_KEY trên Render. Không thêm Bearer hoặc dấu nháy.
   responses:
     Unauthorized:
       description: Thiếu hoặc sai API key
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorResponse"
+            $ref: '#/components/schemas/ErrorResponse'
     ValidationError:
       description: Dữ liệu đầu vào không hợp lệ
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorResponse"
-
+            $ref: '#/components/schemas/ErrorResponse'
+    ApiKeyNotConfigured:
+      description: Render chưa đọc được API_KEY trong môi trường chạy.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
   schemas:
     HealthResponse:
       type: object
@@ -181,8 +238,10 @@ components:
           type: string
         version:
           type: string
-      required: [status, service, version]
-
+      required:
+      - status
+      - service
+      - version
     CapabilitiesResponse:
       type: object
       properties:
@@ -204,34 +263,46 @@ components:
           type: array
           items:
             type: string
-      required: [service, version]
-
+        supported_early_retirement_policies:
+          type: array
+          items:
+            type: string
+        armed_forces_supported:
+          type: boolean
+      required:
+      - service
+      - version
     PensionRequest:
       type: object
       required:
-        - person
-        - pension_start_month
-        - retirement_case
-        - contributions
+      - person
+      - pension_start_month
+      - retirement_case
+      - contributions
       properties:
         person:
-          $ref: "#/components/schemas/Person"
+          $ref: '#/components/schemas/Person'
         pension_start_month:
           type: string
-          pattern: "^\\d{4}-(0[1-9]|1[0-2])$"
+          pattern: ^\d{4}-(0[1-9]|1[0-2])$
           description: Tháng bắt đầu hưởng, định dạng YYYY-MM.
         retirement_case:
           type: string
           enum:
-            - normal
-            - hazardous_or_special_region
-            - underground_coal
-            - reduced_capacity
-            - occupational_hiv
-            - armed_forces
+          - normal
+          - hazardous_or_special_region
+          - underground_coal
+          - reduced_capacity
+          - policy_no_reduction
+          - occupational_hiv
+          - armed_forces
         source_document_type:
           type: string
-          enum: [direct_input, mau_07_sbh, vssid, other]
+          enum:
+          - direct_input
+          - mau_07_sbh
+          - vssid
+          - other
           default: direct_input
         history_confirmed:
           type: boolean
@@ -243,17 +314,17 @@ components:
           type: array
           minItems: 1
           items:
-            $ref: "#/components/schemas/ContributionPeriod"
+            $ref: '#/components/schemas/ContributionPeriod'
         impairment_percent:
           type: number
           minimum: 0
           maximum: 100
         impairment_assessment_month:
           type: string
-          pattern: "^\\d{4}-(0[1-9]|1[0-2])$"
+          pattern: ^\d{4}-(0[1-9]|1[0-2])$
         eligibility_achieved_month:
           type: string
-          pattern: "^\\d{4}-(0[1-9]|1[0-2])$"
+          pattern: ^\d{4}-(0[1-9]|1[0-2])$
         hazardous_or_special_region_months:
           type: integer
           minimum: 0
@@ -276,64 +347,78 @@ components:
           type: number
           exclusiveMinimum: 0
         adjustment:
-          $ref: "#/components/schemas/AdjustmentInput"
-
+          $ref: '#/components/schemas/AdjustmentInput'
+        early_retirement_policy:
+          $ref: '#/components/schemas/EarlyRetirementPolicyEvidence'
     Person:
       type: object
-      required: [date_of_birth, sex]
+      required:
+      - date_of_birth
+      - sex
       properties:
         date_of_birth:
           type: string
           format: date
         sex:
           type: string
-          enum: [male, female]
-
+          enum:
+          - male
+          - female
     ContributionPeriod:
       type: object
       required:
-        - from_month
-        - to_month
-        - participation_status
-        - confirmation_status
+      - from_month
+      - to_month
+      - participation_status
+      - confirmation_status
       properties:
         from_month:
           type: string
-          pattern: "^\\d{4}-(0[1-9]|1[0-2])$"
+          pattern: ^\d{4}-(0[1-9]|1[0-2])$
         to_month:
           type: string
-          pattern: "^\\d{4}-(0[1-9]|1[0-2])$"
+          pattern: ^\d{4}-(0[1-9]|1[0-2])$
         participation_status:
           type: string
-          enum: [contributed, credited_duration_only, not_participating]
+          enum:
+          - contributed
+          - credited_duration_only
+          - not_participating
         duration_only_reason:
           type: string
-          enum: [pre1995_no_salary_or_living_allowance]
+          enum:
+          - pre1995_no_salary_or_living_allowance
         contribution_type:
           type: string
-          enum: [compulsory_state, compulsory_employer, voluntary]
+          enum:
+          - compulsory_state
+          - compulsory_employer
+          - voluntary
         basis_input_type:
           type: string
           enum:
-            - total_vnd
-            - converted_state_vnd
-            - component_sum_vnd
-            - mau_07_sbh_components
-            - salary_coefficient
-            - unknown
+          - total_vnd
+          - converted_state_vnd
+          - component_sum_vnd
+          - mau_07_sbh_components
+          - salary_coefficient
+          - unknown
           default: total_vnd
         monthly_basis_vnd:
           type: number
           exclusiveMinimum: 0
         sbh_components:
-          $ref: "#/components/schemas/Mau07SbhBasisComponents"
+          $ref: '#/components/schemas/Mau07SbhBasisComponents'
         source_row_id:
           type: string
         source_text:
           type: string
         confirmation_status:
           type: string
-          enum: [confirmed, unconfirmed, unclear]
+          enum:
+          - confirmed
+          - unconfirmed
+          - unclear
         coefficient_override:
           type: number
           exclusiveMinimum: 0
@@ -348,19 +433,45 @@ components:
         qualifying_underground_coal:
           type: boolean
           default: false
-      description: >
-        Nếu participation_status=contributed thì phải có contribution_type.
-        Với total_vnd phải gửi monthly_basis_vnd.
-        Với mau_07_sbh_components phải gửi sbh_components và không gửi monthly_basis_vnd.
-        Với not_participating không cần mức đóng hoặc contribution_type.
-
+        hazardous_match_status:
+          type: string
+          enum:
+          - not_evaluated
+          - candidate
+          - confirmed
+          - rejected
+          default: not_evaluated
+          description: candidate chỉ là gợi ý; chỉ confirmed mới được tính.
+        hazardous_catalog_code:
+          type: string
+          description: Mã tra cứu trong Danh_muc_hien_hanh.
+        hazardous_catalog_title:
+          type: string
+          description: Tên nghề/công việc khớp trong danh mục.
+        hazardous_class:
+          type: string
+          enum:
+          - IV
+          - V
+          - VI
+        hazardous_legal_document:
+          type: string
+        hazardous_user_confirmed:
+          type: boolean
+          default: false
+      description: Giai đoạn nghề nặng nhọc chỉ được đánh dấu qualifying khi đã đối chiếu đúng mã, tên nghề, điều
+        kiện, thời gian và được người dùng xác nhận. Không dùng kết quả gần giống để tự kết luận.
     Mau07SbhBasisComponents:
       type: object
-      required: [unit, base_value]
+      required:
+      - unit
+      - base_value
       properties:
         unit:
           type: string
-          enum: [coefficient, vnd]
+          enum:
+          - coefficient
+          - vnd
         base_value:
           type: number
           minimum: 0
@@ -391,11 +502,12 @@ components:
         base_salary_vnd_override:
           type: number
           exclusiveMinimum: 0
-      description: >
-        Tổng = base_value + position_allowance + seniority_beyond_frame_allowance
-        + professional_seniority_allowance + regional_allowance + other_allowance
-        + reelection_allowance. Mọi thành phần phải cùng đơn vị.
-
+          description: Tùy chọn. Không gửi cho compulsory_state nếu muốn API dùng bảng lương cơ sở tích hợp. Chỉ
+            gửi khi cần ép dùng một mức cụ thể cho toàn bộ giai đoạn.
+      description: Các thành phần đã chuẩn hóa của một dòng Mẫu 07/SBH. Tổng = base_value + position_allowance +
+        seniority_beyond_frame_allowance + professional_seniority_allowance + regional_allowance + other_allowance
+        + reelection_allowance. Với lương Nhà nước và unit=coefficient, API tự quy đổi sang VND; thường bỏ trống
+        base_salary_vnd_override.
     AdjustmentInput:
       type: object
       properties:
@@ -414,7 +526,6 @@ components:
           additionalProperties:
             type: number
             exclusiveMinimum: 0
-
     HistoryValidationResult:
       type: object
       properties:
@@ -440,14 +551,19 @@ components:
           type: array
           items:
             type: object
-      required: [valid_for_calculation, total_unique_months]
-
+      required:
+      - valid_for_calculation
+      - total_unique_months
     PensionResponse:
       type: object
       properties:
         status:
           type: string
-          enum: [eligible, not_eligible, needs_more_data, manual_review]
+          enum:
+          - eligible
+          - not_eligible
+          - needs_more_data
+          - manual_review
         error_code:
           type: string
         eligibility:
@@ -492,10 +608,97 @@ components:
           type: array
           items:
             type: string
-      required: [status]
-
+        hazardous_summary:
+          type: object
+          properties:
+            confirmed_hazardous_months:
+              type: integer
+            confirmed_especially_hazardous_months:
+              type: integer
+            confirmed_underground_coal_months:
+              type: integer
+            exact_hazardous_duration:
+              type: string
+            confirmed_periods:
+              type: array
+              items:
+                type: object
+        early_retirement_policy_result:
+          type: object
+          properties:
+            policy_code:
+              type: string
+            age_reference:
+              type: string
+            reference_threshold_date:
+              type: string
+              format: date
+            early_retirement_months:
+              type: integer
+            maximum_early_months:
+              type: integer
+            no_reduction_applied:
+              type: boolean
+            decision_number:
+              type: string
+            reasons:
+              type: array
+              items:
+                type: string
+            warnings:
+              type: array
+              items:
+                type: string
+      required:
+      - status
     ErrorResponse:
       type: object
       properties:
         detail:
           description: Nội dung lỗi do API trả về.
+    EarlyRetirementPolicyEvidence:
+      type: object
+      required:
+      - policy_code
+      - legal_document_number
+      properties:
+        policy_code:
+          type: string
+          enum:
+          - nd154_2025_streamlining
+          - nd178_2024_nd67_2025_restructuring
+          - nd177_2024_non_reappointment
+          - other_no_reduction
+        legal_document_number:
+          type: string
+        age_reference:
+          type: string
+          enum:
+          - normal_schedule
+          - hazardous_schedule
+          default: normal_schedule
+        competent_authority_decision_number:
+          type: string
+        competent_authority_decision_date:
+          type: string
+          format: date
+        approved_by_competent_authority:
+          type: boolean
+          default: false
+        no_reduction_confirmed:
+          type: boolean
+          default: false
+        confirmation_status:
+          type: string
+          enum:
+          - confirmed
+          - unconfirmed
+          - unclear
+          default: unconfirmed
+        custom_maximum_early_months:
+          type: integer
+          minimum: 1
+          maximum: 240
+        note:
+          type: string
+      description: Căn cứ pháp lý và quyết định cá nhân để áp dụng nghỉ trước tuổi không giảm tỷ lệ.

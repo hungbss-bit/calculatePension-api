@@ -5,7 +5,7 @@ client = TestClient(app)
 
 
 def test_health_and_capabilities():
-    assert client.get('/health').json()['version'] == '2.2.0'
+    assert client.get('/health').json()['version'] == '2.3.0'
     response = client.get('/v1/capabilities')
     assert response.status_code == 200
     assert response.json()['built_in_coefficient_years'] == [2026]

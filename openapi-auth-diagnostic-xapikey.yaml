@@ -1,0 +1,102 @@
+openapi: 3.1.0
+info:
+  title: calculatePension v2.2.0 - Chẩn đoán X-API-Key
+  version: 2.2.0
+  description: Schema tạm thời để xác định ChatGPT có gửi custom header X-API-Key và khóa có khớp với
+    runtime Render hay không.
+servers:
+- url: https://calculatepension-api.onrender.com
+paths:
+  /health:
+    get:
+      operationId: checkPensionApiHealth
+      summary: Kiểm tra API
+      responses:
+        '200':
+          description: API hoạt động
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  service:
+                    type: string
+                  version:
+                    type: string
+  /v1/authDiagnostics:
+    get:
+      operationId: checkApiKeyDiagnostics
+      summary: Kiểm tra custom header X-API-Key
+      description: Yêu cầu AUTH_DIAGNOSTICS_ENABLED=true trên Render. Endpoint không tiết lộ khóa, chỉ
+        trả fingerprint và kết quả so khớp.
+      security:
+      - CalculatePensionApiKeyV220: []
+      responses:
+        '200':
+          description: Kết quả chẩn đoán
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configured:
+                    type: boolean
+                  configured_env_name:
+                    type: string
+                  expected_length:
+                    type: integer
+                  expected_fingerprint_sha256_12:
+                    type: string
+                  received_present:
+                    type: boolean
+                  received_length_normalized:
+                    type: integer
+                  received_fingerprint_sha256_12:
+                    type: string
+                  normalized_match:
+                    type: boolean
+                  next_step_vi:
+                    type: string
+                required:
+                - configured
+                - received_present
+                - normalized_match
+        '404':
+          description: AUTH_DIAGNOSTICS_ENABLED chưa bật.
+  /v1/capabilities:
+    get:
+      operationId: getPensionCapabilities
+      summary: Kiểm tra endpoint có bảo vệ bằng X-API-Key
+      security:
+      - CalculatePensionApiKeyV220: []
+      responses:
+        '200':
+          description: Khóa hợp lệ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                  version:
+                    type: string
+                  legal_rule_version:
+                    type: string
+                  built_in_coefficient_years:
+                    type: array
+                    items:
+                      type: integer
+        '401':
+          description: Thiếu hoặc sai X-API-Key.
+        '503':
+          description: Runtime chưa đọc được API_KEY.
+components:
+  securitySchemes:
+    CalculatePensionApiKeyV220:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Custom header duy nhất cho calculatePension v2.2.0.

@@ -1,0 +1,324 @@
+{
+  "calculation_id": "1c357c52-87c9-43b6-9212-62149f7c81c4",
+  "status": "not_eligible",
+  "error_code": null,
+  "legal_rule_version": "VN-LBHXH-41/2024-QH15@2025-07-01+ND158/2025/ND-CP+ND159/2025/ND-CP+TT12/2025/TT-BNV+ND135/2020/ND-CP+BHXH-340/CSXH-2026+TT11/2020+TT19/2023+ND154/2025+ND178/2024+ND67/2025+ND177/2024+HAZARDOUS-CONFIRMATION-V1",
+  "requested_pension_start_month": "2026-10",
+  "retirement_end_date": "2026-09-30",
+  "normal_retirement_age_in_retirement_year": "57 tuổi",
+  "normal_retirement_threshold_date": "2032-09-01",
+  "earliest_normal_pension_start_month": "2035-10",
+  "history_validation": {
+    "valid_for_calculation": true,
+    "total_unique_months": 240,
+    "average_basis_months": 240,
+    "credited_duration_only_months": 0,
+    "excluded_non_participation_months": 0,
+    "gaps": [],
+    "overlaps": [],
+    "issues": []
+  },
+  "contribution_summary": {
+    "total_months": 240,
+    "compulsory_months": 240,
+    "voluntary_months": 0,
+    "average_basis_months": 240,
+    "credited_duration_only_months": 0,
+    "excluded_non_participation_months": 0,
+    "exact_duration": "20 năm 0 tháng",
+    "rounded_years_for_rate": "20"
+  },
+  "hazardous_summary": {
+    "confirmed_hazardous_months": 180,
+    "confirmed_especially_hazardous_months": 180,
+    "confirmed_underground_coal_months": 0,
+    "exact_hazardous_duration": "15 năm 0 tháng",
+    "confirmed_periods": [
+      {
+        "source_row_id": "1",
+        "from_month": "2006-10",
+        "to_month": "2021-09",
+        "months": 180,
+        "catalog_code": "DM-0008",
+        "catalog_title": "Khoan khai thác đá bằng búa máy cầm tay",
+        "hazardous_class": "V",
+        "legal_document": "11/2020/TT-BLĐTBXH"
+      }
+    ]
+  },
+  "early_retirement_policy_result": null,
+  "eligibility": {
+    "eligible": false,
+    "case": "hazardous_or_special_region",
+    "regime": "compulsory",
+    "reasons": [
+      "Ngày nghỉ 2026-09-30 chưa đạt ngưỡng tuổi 2027-09-01 của trường hợp này."
+    ],
+    "missing_fields": [],
+    "required_total_months": null,
+    "required_compulsory_months": 180,
+    "months_short": 0,
+    "can_pay_missing_months_once": false
+  },
+  "average_basis": {
+    "amount_vnd": "14776250",
+    "average_monthly_basis_vnd": "14776250",
+    "basis_months_used": 240,
+    "method": "Bình quân toàn bộ tháng lương doanh nghiệp sau điều chỉnh",
+    "coefficient_year": 2026,
+    "state_average_months_used": 0,
+    "yearly_breakdown": [
+      {
+        "year": 2006,
+        "contribution_type": "compulsory_employer",
+        "months": 3,
+        "original_total_vnd": "30000000",
+        "adjusted_total_vnd": "91500000",
+        "coefficient": "3.05"
+      },
+      {
+        "year": 2007,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "337200000",
+        "coefficient": "2.81"
+      },
+      {
+        "year": 2008,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "274800000",
+        "coefficient": "2.29"
+      },
+      {
+        "year": 2009,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "256800000",
+        "coefficient": "2.14"
+      },
+      {
+        "year": 2010,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "235200000",
+        "coefficient": "1.96"
+      },
+      {
+        "year": 2011,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "198000000",
+        "coefficient": "1.65"
+      },
+      {
+        "year": 2012,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "181200000",
+        "coefficient": "1.51"
+      },
+      {
+        "year": 2013,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "170400000",
+        "coefficient": "1.42"
+      },
+      {
+        "year": 2014,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "163200000",
+        "coefficient": "1.36"
+      },
+      {
+        "year": 2015,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "163200000",
+        "coefficient": "1.36"
+      },
+      {
+        "year": 2016,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "158400000",
+        "coefficient": "1.32"
+      },
+      {
+        "year": 2017,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "153600000",
+        "coefficient": "1.28"
+      },
+      {
+        "year": 2018,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "147600000",
+        "coefficient": "1.23"
+      },
+      {
+        "year": 2019,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "144000000",
+        "coefficient": "1.20"
+      },
+      {
+        "year": 2020,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "139200000",
+        "coefficient": "1.16"
+      },
+      {
+        "year": 2021,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "136800000",
+        "coefficient": "1.14"
+      },
+      {
+        "year": 2022,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "133200000",
+        "coefficient": "1.11"
+      },
+      {
+        "year": 2023,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "128400000",
+        "coefficient": "1.07"
+      },
+      {
+        "year": 2024,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "123600000",
+        "coefficient": "1.03"
+      },
+      {
+        "year": 2025,
+        "contribution_type": "compulsory_employer",
+        "months": 12,
+        "original_total_vnd": "120000000",
+        "adjusted_total_vnd": "120000000",
+        "coefficient": "1.00"
+      },
+      {
+        "year": 2026,
+        "contribution_type": "compulsory_employer",
+        "months": 9,
+        "original_total_vnd": "90000000",
+        "adjusted_total_vnd": "90000000",
+        "coefficient": "1.00"
+      }
+    ]
+  },
+  "basis_component_audit": [],
+  "pension_rate": {
+    "rounded_years": "20",
+    "base_rate_percent": "55",
+    "early_retirement_months": 0,
+    "early_retirement_reduction_percent": "0",
+    "final_rate_percent": "55",
+    "reduction_reference_age": null
+  },
+  "estimated_monthly_pension_vnd": null,
+  "pension_calculation_formula": null,
+  "one_time_retirement_allowance_vnd": null,
+  "minimum_floor_applied": false,
+  "assumptions": [
+    "pension_start_month là tháng đầu tiên hưởng; ngày nghỉ được hiểu là ngày cuối tháng trước.",
+    "Mỗi khoảng đóng bao gồm cả tháng bắt đầu và tháng kết thúc.",
+    "Dòng ghi rõ không tham gia BHXH được loại khỏi cả thời gian và mức bình quân.",
+    "Giai đoạn credited_duration_only chỉ cộng thời gian hưởng, không đưa mức lương vào bình quân.",
+    "Với Mẫu 07/SBH dùng thành phần, tổng hệ số/mức đóng bằng Mức đóng + Chức vụ + TN VK + TN Nghề + Khu vực + Khác + Tái cử."
+  ],
+  "warnings": [
+    "Kết quả là ước tính; hồ sơ được cơ quan BHXH xác nhận và quy định có hiệu lực tại thời điểm giải quyết là căn cứ cuối cùng."
+  ],
+  "audit_steps": [
+    "Chuẩn hóa được 240 tháng được tính là thời gian tham gia BHXH.",
+    "Có 240 tháng có mức đóng dùng tính bình quân; 0 tháng chỉ cộng thời gian; 0 tháng không tham gia đã loại bỏ.",
+    "Thời gian dùng tính tỷ lệ sau làm tròn: 20 năm.",
+    "Nghề nặng nhọc đã xác nhận: 180 tháng (15 năm 0 tháng).",
+    "Tính mức bình quân theo phương pháp: Bình quân toàn bộ tháng lương doanh nghiệp sau điều chỉnh.",
+    "Tỷ lệ cơ bản 55%, giảm 0%, còn 55%."
+  ],
+  "legal_references": [
+    {
+      "document": "Luật Bảo hiểm xã hội số 41/2024/QH15",
+      "provisions": "Điều 64, 65, 66, 68, 72, 73 và 111",
+      "purpose": "Điều kiện hưởng, tỷ lệ, giảm do nghỉ trước tuổi, trợ cấp một lần, mức bình quân và quá trình hỗn hợp."
+    },
+    {
+      "document": "Nghị định 158/2025/NĐ-CP",
+      "provisions": "Điều 15, Điều 16 và quy định về thời gian đóng hỗn hợp",
+      "purpose": "Mức bình quân, điều chỉnh tiền lương; loại khỏi mức bình quân thời gian trước 01/01/1995 được công nhận nhưng không hưởng lương/sinh hoạt phí; xác định chính sách áp dụng khi có quá trình hỗn hợp."
+    },
+    {
+      "document": "Nghị định 159/2025/NĐ-CP",
+      "provisions": "Điều 11",
+      "purpose": "Điều kiện, tỷ lệ và mức bình quân đối với quá trình bắt buộc kết hợp tự nguyện."
+    },
+    {
+      "document": "Thông tư 12/2025/TT-BNV",
+      "provisions": "Công thức mức bình quân tiền lương làm căn cứ đóng BHXH",
+      "purpose": "Công thức bình quân lương Nhà nước, lương doanh nghiệp và quá trình hỗn hợp."
+    },
+    {
+      "document": "Nghị định 135/2020/NĐ-CP",
+      "provisions": "Lộ trình tuổi nghỉ hưu",
+      "purpose": "Xác định tuổi nghỉ hưu theo năm nghỉ."
+    },
+    {
+      "document": "Thông tư 11/2020/TT-BLĐTBXH và Thông tư 19/2023/TT-BLĐTBXH",
+      "provisions": "Danh mục nghề, công việc nặng nhọc, độc hại, nguy hiểm",
+      "purpose": "Đối chiếu tên nghề/công việc, phân loại IV, V, VI và thời gian thực tế trước khi xác nhận tháng đủ điều kiện."
+    },
+    {
+      "document": "Nghị định 154/2025/NĐ-CP",
+      "provisions": "Chính sách nghỉ hưu trước tuổi do tinh giản biên chế",
+      "purpose": "Xác định trường hợp không bị trừ tỷ lệ do nghỉ trước tuổi khi có quyết định của cấp có thẩm quyền."
+    },
+    {
+      "document": "Nghị định 178/2024/NĐ-CP được sửa đổi bởi Nghị định 67/2025/NĐ-CP",
+      "provisions": "Chính sách khi sắp xếp tổ chức bộ máy",
+      "purpose": "Xác định trường hợp nghỉ hưu trước tuổi không giảm tỷ lệ theo phương án và quyết định đã phê duyệt."
+    },
+    {
+      "document": "Nghị định 177/2024/NĐ-CP",
+      "provisions": "Chính sách đối với trường hợp không tái cử, tái bổ nhiệm",
+      "purpose": "Xác định trường hợp dân sự đủ điều kiện nghỉ trước tuổi không giảm tỷ lệ; không áp dụng tự động cho lực lượng vũ trang."
+    },
+    {
+      "document": "Công văn 340/BHXH-CSXH ngày 03/02/2026",
+      "provisions": "Hệ số điều chỉnh năm 2026",
+      "purpose": "Điều chỉnh tiền lương và thu nhập tháng đã đóng BHXH khi giải quyết trong năm 2026."
+    }
+  ]
+}

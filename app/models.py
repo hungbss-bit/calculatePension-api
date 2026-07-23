@@ -36,8 +36,34 @@ class RetirementCase(str, Enum):
     hazardous_or_special_region = "hazardous_or_special_region"
     underground_coal = "underground_coal"
     reduced_capacity = "reduced_capacity"
+    policy_no_reduction = "policy_no_reduction"
     occupational_hiv = "occupational_hiv"
     armed_forces = "armed_forces"
+
+
+class HazardousMatchStatus(str, Enum):
+    not_evaluated = "not_evaluated"
+    candidate = "candidate"
+    confirmed = "confirmed"
+    rejected = "rejected"
+
+
+class HazardousClass(str, Enum):
+    IV = "IV"
+    V = "V"
+    VI = "VI"
+
+
+class EarlyRetirementPolicyCode(str, Enum):
+    nd154_2025_streamlining = "nd154_2025_streamlining"
+    nd178_2024_nd67_2025_restructuring = "nd178_2024_nd67_2025_restructuring"
+    nd177_2024_non_reappointment = "nd177_2024_non_reappointment"
+    other_no_reduction = "other_no_reduction"
+
+
+class RetirementAgeReference(str, Enum):
+    normal_schedule = "normal_schedule"
+    hazardous_schedule = "hazardous_schedule"
 
 
 class SourceDocumentType(str, Enum):
@@ -74,6 +100,22 @@ class PensionRegime(str, Enum):
     mixed_voluntary_policy = "mixed_voluntary_policy"
     undetermined = "undetermined"
 
+
+class EarlyRetirementPolicyEvidence(BaseModel):
+    model_config = ConfigDict(title="Căn cứ nghỉ hưu trước tuổi không giảm tỷ lệ")
+    policy_code: EarlyRetirementPolicyCode
+    legal_document_number: str = Field(
+        title="Số nghị định/quyết định áp dụng",
+        description="Ví dụ 154/2025/NĐ-CP hoặc quyết định nghỉ hưu của cấp có thẩm quyền.",
+    )
+    age_reference: RetirementAgeReference = RetirementAgeReference.normal_schedule
+    competent_authority_decision_number: str | None = None
+    competent_authority_decision_date: date | None = None
+    approved_by_competent_authority: bool = False
+    no_reduction_confirmed: bool = False
+    confirmation_status: ConfirmationStatus = ConfirmationStatus.unconfirmed
+    custom_maximum_early_months: Annotated[int | None, Field(ge=1, le=240)] = None
+    note: str | None = None
 
 class Person(BaseModel):
     model_config = ConfigDict(title="Thông tin cá nhân")
@@ -194,6 +236,12 @@ class ContributionPeriod(BaseModel):
     coefficient_override: Annotated[Decimal | None, Field(gt=0)] = None
     note: str | None = None
 
+    hazardous_match_status: HazardousMatchStatus = HazardousMatchStatus.not_evaluated
+    hazardous_catalog_code: str | None = None
+    hazardous_catalog_title: str | None = None
+    hazardous_class: HazardousClass | None = None
+    hazardous_legal_document: str | None = None
+    hazardous_user_confirmed: bool = False
     qualifying_hazardous: bool = False
     qualifying_especially_hazardous: bool = False
     qualifying_underground_coal: bool = False
@@ -202,6 +250,25 @@ class ContributionPeriod(BaseModel):
     def validate_period(self) -> "ContributionPeriod":
         if self.from_month > self.to_month:
             raise ValueError("Từ tháng phải nhỏ hơn hoặc bằng đến tháng.")
+
+        any_hazardous_flag = (
+            self.qualifying_hazardous
+            or self.qualifying_especially_hazardous
+            or self.qualifying_underground_coal
+        )
+        if any_hazardous_flag:
+            if self.hazardous_match_status != HazardousMatchStatus.confirmed:
+                raise ValueError(
+                    "Giai đoạn nghề nặng nhọc chỉ được đánh dấu đủ điều kiện khi hazardous_match_status=confirmed."
+                )
+            if not self.hazardous_user_confirmed:
+                raise ValueError(
+                    "Giai đoạn nghề nặng nhọc phải được người dùng xác nhận trước khi tính."
+                )
+            if not self.hazardous_catalog_code or not self.hazardous_catalog_title:
+                raise ValueError(
+                    "Giai đoạn nghề nặng nhọc đã xác nhận phải có mã và tên nghề trong danh mục."
+                )
 
         if self.participation_status == ParticipationStatus.not_participating:
             return self
@@ -305,6 +372,7 @@ class PensionRequest(BaseModel):
     hazardous_or_special_region_months: int = Field(default=0, ge=0)
     especially_hazardous_months: int = Field(default=0, ge=0)
     underground_coal_months: int = Field(default=0, ge=0)
+    early_retirement_policy: EarlyRetirementPolicyEvidence | None = None
 
     state_salary_values_are_converted: bool = False
     transitional_minimum_floor_eligible: bool = False
@@ -415,6 +483,39 @@ class LegalReference(BaseModel):
     purpose: str
 
 
+class HazardousMatchedPeriod(BaseModel):
+    source_row_id: str | None = None
+    from_month: str
+    to_month: str
+    months: int
+    catalog_code: str
+    catalog_title: str
+    hazardous_class: HazardousClass | None = None
+    legal_document: str | None = None
+
+
+class HazardousSummary(BaseModel):
+    confirmed_hazardous_months: int = 0
+    confirmed_especially_hazardous_months: int = 0
+    confirmed_underground_coal_months: int = 0
+    exact_hazardous_duration: str = "0 năm 0 tháng"
+    confirmed_periods: list[HazardousMatchedPeriod] = Field(default_factory=list)
+
+
+class EarlyRetirementPolicyResult(BaseModel):
+    policy_code: EarlyRetirementPolicyCode | None = None
+    legal_document_number: str | None = None
+    age_reference: RetirementAgeReference | None = None
+    reference_threshold_date: date | None = None
+    early_retirement_months: int = 0
+    maximum_early_months: int | None = None
+    no_reduction_applied: bool = False
+    approved_by_competent_authority: bool = False
+    decision_number: str | None = None
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class PensionResponse(BaseModel):
     calculation_id: str
     status: str
@@ -428,6 +529,8 @@ class PensionResponse(BaseModel):
 
     history_validation: HistoryValidationResult
     contribution_summary: ContributionSummary
+    hazardous_summary: HazardousSummary = Field(default_factory=HazardousSummary)
+    early_retirement_policy_result: EarlyRetirementPolicyResult | None = None
     eligibility: EligibilityResult
     average_basis: AverageBasisResult
     basis_component_audit: list[BasisComponentAudit] = Field(default_factory=list)
@@ -452,4 +555,6 @@ class CapabilitiesResponse(BaseModel):
     supported_retirement_cases: list[RetirementCase]
     manual_review_cases: list[RetirementCase]
     supported_source_documents: list[SourceDocumentType]
+    supported_early_retirement_policies: list[EarlyRetirementPolicyCode] = Field(default_factory=list)
+    armed_forces_supported: bool = False
     notes: list[str]

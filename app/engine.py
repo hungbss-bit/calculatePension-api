@@ -31,6 +31,12 @@ from .models import (
     SbhComponentUnit,
     YearlyAdjustmentBreakdown,
     EligibilityResult,
+    EarlyRetirementPolicyCode,
+    EarlyRetirementPolicyResult,
+    HazardousMatchStatus,
+    HazardousMatchedPeriod,
+    HazardousSummary,
+    RetirementAgeReference,
 )
 from .rules import (
     COEFFICIENTS_2026,
@@ -214,6 +220,28 @@ def validate_contribution_history(request: PensionRequest) -> HistoryValidationR
                 code="ROW_NOT_CONFIRMED",
                 severity="error",
                 message_vi=f"Dòng {row_id} chưa được xác nhận rõ ràng.",
+                source_row_id=row_id,
+                from_month=period.from_month,
+                to_month=period.to_month,
+            ))
+
+        hazardous_needed = (
+            request.retirement_case == RetirementCase.hazardous_or_special_region
+            or (
+                request.retirement_case == RetirementCase.policy_no_reduction
+                and request.early_retirement_policy is not None
+                and request.early_retirement_policy.age_reference
+                == RetirementAgeReference.hazardous_schedule
+            )
+        )
+        if hazardous_needed and period.hazardous_match_status == HazardousMatchStatus.candidate:
+            issues.append(HistoryIssue(
+                code="HAZARDOUS_PERIOD_NOT_CONFIRMED",
+                severity="error",
+                message_vi=(
+                    f"Dòng {row_id} mới là ứng viên nghề nặng nhọc, độc hại; "
+                    "cần người dùng xác nhận tên nghề, điều kiện và thời gian thực tế."
+                ),
                 source_row_id=row_id,
                 from_month=period.from_month,
                 to_month=period.to_month,
@@ -699,11 +727,159 @@ def contribution_completion_month(
     return None
 
 
+def build_hazardous_summary(request: PensionRequest) -> HazardousSummary:
+    periods: list[HazardousMatchedPeriod] = []
+    hazardous_months = 0
+    especially_months = 0
+    coal_months = 0
+    for index, period in enumerate(request.contributions, start=1):
+        if (
+            period.participation_status == ParticipationStatus.not_participating
+            or period.hazardous_match_status != HazardousMatchStatus.confirmed
+            or not period.hazardous_user_confirmed
+            or not period.qualifying_hazardous
+            or not period.hazardous_catalog_code
+            or not period.hazardous_catalog_title
+        ):
+            continue
+        months = months_inclusive(
+            parse_year_month(period.from_month), parse_year_month(period.to_month)
+        )
+        hazardous_months += months
+        if period.qualifying_especially_hazardous:
+            especially_months += months
+        if period.qualifying_underground_coal:
+            coal_months += months
+        periods.append(HazardousMatchedPeriod(
+            source_row_id=period.source_row_id or str(index),
+            from_month=period.from_month,
+            to_month=period.to_month,
+            months=months,
+            catalog_code=period.hazardous_catalog_code,
+            catalog_title=period.hazardous_catalog_title,
+            hazardous_class=period.hazardous_class,
+            legal_document=period.hazardous_legal_document,
+        ))
+    return HazardousSummary(
+        confirmed_hazardous_months=hazardous_months,
+        confirmed_especially_hazardous_months=especially_months,
+        confirmed_underground_coal_months=coal_months,
+        exact_hazardous_duration=exact_duration(hazardous_months),
+        confirmed_periods=periods,
+    )
+
+
+def policy_maximum_early_months(
+    code: EarlyRetirementPolicyCode,
+    age_reference: RetirementAgeReference,
+    custom: int | None,
+) -> int | None:
+    if code == EarlyRetirementPolicyCode.nd154_2025_streamlining:
+        return 60
+    if code == EarlyRetirementPolicyCode.nd178_2024_nd67_2025_restructuring:
+        return 60 if age_reference == RetirementAgeReference.hazardous_schedule else 120
+    if code == EarlyRetirementPolicyCode.nd177_2024_non_reappointment:
+        return 60
+    return custom
+
+
+def policy_early_months(
+    request: PensionRequest,
+    retirement_end: date,
+    offset_years: int,
+) -> tuple[int, date]:
+    threshold, threshold_age = threshold_date_for_retirement_year(
+        request.person.date_of_birth,
+        request.person.sex.value,
+        retirement_end.year,
+        offset_years,
+    )
+    required_age_months = threshold_age[0] * 12 + threshold_age[1]
+    actual_age_months = completed_age_months(request.person.date_of_birth, retirement_end)
+    return max(0, required_age_months - actual_age_months), threshold
+
+
+def evaluate_early_retirement_policy(
+    request: PensionRequest,
+    retirement_end: date,
+    compulsory_months: int,
+    hazardous_months: int,
+) -> tuple[EarlyRetirementPolicyResult, list[str], list[str], int]:
+    evidence = request.early_retirement_policy
+    reasons: list[str] = []
+    missing: list[str] = []
+    warnings: list[str] = []
+    if evidence is None:
+        return EarlyRetirementPolicyResult(
+            reasons=["Chưa cung cấp căn cứ nghỉ hưu trước tuổi không giảm tỷ lệ."]
+        ), reasons, ["early_retirement_policy"], 0
+
+    offset = 5 if evidence.age_reference == RetirementAgeReference.hazardous_schedule else 0
+    early_months, threshold = policy_early_months(request, retirement_end, offset)
+    maximum = policy_maximum_early_months(
+        evidence.policy_code, evidence.age_reference, evidence.custom_maximum_early_months
+    )
+
+    if compulsory_months < 180:
+        reasons.append(f"Cần ít nhất 180 tháng BHXH bắt buộc; hiện có {compulsory_months} tháng.")
+    if evidence.age_reference == RetirementAgeReference.hazardous_schedule and hazardous_months < 180:
+        reasons.append(
+            f"Cần ít nhất 180 tháng nghề/công việc nặng nhọc đã xác nhận; hiện có {hazardous_months} tháng."
+        )
+    if evidence.confirmation_status != ConfirmationStatus.confirmed:
+        missing.append("early_retirement_policy.confirmation_status")
+    if not evidence.approved_by_competent_authority:
+        missing.append("early_retirement_policy.approved_by_competent_authority")
+    if not evidence.no_reduction_confirmed:
+        missing.append("early_retirement_policy.no_reduction_confirmed")
+    if not evidence.competent_authority_decision_number:
+        missing.append("early_retirement_policy.competent_authority_decision_number")
+    if evidence.competent_authority_decision_date is None:
+        missing.append("early_retirement_policy.competent_authority_decision_date")
+    if maximum is None:
+        missing.append("early_retirement_policy.custom_maximum_early_months")
+    elif early_months > maximum:
+        reasons.append(
+            f"Nghỉ sớm {early_months} tháng, vượt giới hạn {maximum} tháng của chính sách đã chọn."
+        )
+
+    pension_start = parse_year_month(request.pension_start_month)
+    if evidence.policy_code == EarlyRetirementPolicyCode.nd154_2025_streamlining:
+        if pension_start < date(2025, 7, 1) or pension_start > date(2030, 12, 1):
+            reasons.append(
+                "Nghị định 154/2025/NĐ-CP áp dụng từ 16/06/2025 đến hết 31/12/2030."
+            )
+    if evidence.policy_code == EarlyRetirementPolicyCode.nd178_2024_nd67_2025_restructuring:
+        warnings.append(
+            "Chỉ áp dụng khi hồ sơ thuộc đúng phương án sắp xếp và đã được cấp có thẩm quyền phê duyệt."
+        )
+    if evidence.policy_code == EarlyRetirementPolicyCode.nd177_2024_non_reappointment:
+        warnings.append(
+            "Chỉ áp dụng cho đúng nhóm không tái cử, tái bổ nhiệm hoặc nghỉ theo nguyện vọng thuộc phạm vi Nghị định 177/2024/NĐ-CP."
+        )
+
+    eligible_policy = not reasons and not missing
+    result = EarlyRetirementPolicyResult(
+        policy_code=evidence.policy_code,
+        legal_document_number=evidence.legal_document_number,
+        age_reference=evidence.age_reference,
+        reference_threshold_date=threshold,
+        early_retirement_months=early_months,
+        maximum_early_months=maximum,
+        no_reduction_applied=eligible_policy,
+        approved_by_competent_authority=evidence.approved_by_competent_authority,
+        decision_number=evidence.competent_authority_decision_number,
+        reasons=reasons,
+        warnings=warnings,
+    )
+    return result, reasons, missing, offset
+
+
 def determine_eligibility(
     request: PensionRequest,
     rows: list[MonthlyRecord],
     retirement_end: date,
-) -> tuple[EligibilityResult, date | None, int, list[str]]:
+) -> tuple[EligibilityResult, date | None, int, list[str], EarlyRetirementPolicyResult | None]:
     total = len(rows)
     compulsory = sum(1 for r in rows if r.contribution_type != ContributionType.voluntary)
     voluntary = total - compulsory
@@ -715,20 +891,25 @@ def determine_eligibility(
     required_compulsory: int | None = None
     age_threshold: date | None = None
     reference_offset = 0
+    policy_result: EarlyRetirementPolicyResult | None = None
 
     flagged_hazardous = sum(1 for r in rows if r.qualifying_hazardous)
     flagged_especially = sum(1 for r in rows if r.qualifying_especially_hazardous)
     flagged_coal = sum(1 for r in rows if r.qualifying_underground_coal)
-    hazardous = max(request.hazardous_or_special_region_months, flagged_hazardous)
-    especially = max(request.especially_hazardous_months, flagged_especially)
-    coal = max(request.underground_coal_months, flagged_coal)
+    hazardous = flagged_hazardous
+    especially = flagged_especially
+    coal = flagged_coal
+    if request.hazardous_or_special_region_months > flagged_hazardous:
+        warnings.append(
+            "Đã bỏ qua tổng tháng nghề nặng nhọc nhập thủ công; API chỉ dùng các giai đoạn đã đối chiếu danh mục và người dùng xác nhận."
+        )
 
     if request.retirement_case in {RetirementCase.occupational_hiv, RetirementCase.armed_forces}:
         reasons.append("Trường hợp đặc thù này chưa được tự động hóa đầy đủ.")
         return EligibilityResult(
             eligible=False, case=request.retirement_case, regime=regime,
             reasons=reasons, missing_fields=missing,
-        ), None, reference_offset, warnings
+        ), None, reference_offset, warnings, policy_result
 
     if request.retirement_case == RetirementCase.normal:
         required_total = 180
@@ -768,6 +949,17 @@ def determine_eligibility(
             request.person.date_of_birth, request.person.sex.value, retirement_end.year, 10
         )
 
+    elif request.retirement_case == RetirementCase.policy_no_reduction:
+        regime = PensionRegime.compulsory if voluntary == 0 else PensionRegime.mixed_compulsory_policy
+        required_compulsory = 180
+        policy_result, policy_reasons, policy_missing, reference_offset = evaluate_early_retirement_policy(
+            request, retirement_end, compulsory, hazardous
+        )
+        reasons.extend(policy_reasons)
+        missing.extend(policy_missing)
+        warnings.extend(policy_result.warnings)
+        age_threshold = policy_result.reference_threshold_date
+
     elif request.retirement_case == RetirementCase.reduced_capacity:
         regime = PensionRegime.compulsory if voluntary == 0 else PensionRegime.mixed_compulsory_policy
         required_compulsory = 240
@@ -793,7 +985,11 @@ def determine_eligibility(
                 request.person.date_of_birth, request.person.sex.value, retirement_end.year, 5
             )
 
-    if age_threshold is not None and retirement_end < age_threshold:
+    if (
+        age_threshold is not None
+        and retirement_end < age_threshold
+        and request.retirement_case != RetirementCase.policy_no_reduction
+    ):
         reasons.append(
             f"Ngày nghỉ {retirement_end.isoformat()} chưa đạt ngưỡng tuổi {age_threshold.isoformat()} của trường hợp này."
         )
@@ -827,7 +1023,7 @@ def determine_eligibility(
         required_compulsory_months=required_compulsory,
         months_short=months_short,
         can_pay_missing_months_once=can_pay_missing,
-    ), age_threshold, reference_offset, warnings
+    ), age_threshold, reference_offset, warnings, policy_result
 
 
 def determine_eligibility_achieved_month(
@@ -853,6 +1049,9 @@ def determine_eligibility_achieved_month(
         completion = contribution_completion_month(rows, eligibility.required_total_months, False)
         if completion:
             candidates.append(completion)
+
+    if request.retirement_case == RetirementCase.policy_no_reduction:
+        return parse_year_month(request.pension_start_month)
 
     if request.retirement_case == RetirementCase.reduced_capacity:
         if not request.impairment_assessment_month:
@@ -914,6 +1113,7 @@ def calculate_pension(request: PensionRequest) -> PensionResponse:
     history = validate_contribution_history(request)
     rows = expand_contributions(request)
     basis_component_audit = build_basis_component_audit(request, rows)
+    hazardous_summary = build_hazardous_summary(request)
     total = len(rows)
     compulsory = sum(1 for r in rows if r.contribution_type != ContributionType.voluntary)
     voluntary = total - compulsory
@@ -991,6 +1191,8 @@ def calculate_pension(request: PensionRequest) -> PensionResponse:
             earliest_normal_pension_start_month=format_year_month(earliest_normal_start),
             history_validation=history,
             contribution_summary=summary,
+            hazardous_summary=hazardous_summary,
+            early_retirement_policy_result=None,
             eligibility=eligibility,
             average_basis=empty_average(request),
             basis_component_audit=basis_component_audit,
@@ -1004,10 +1206,24 @@ def calculate_pension(request: PensionRequest) -> PensionResponse:
             legal_references=[LegalReference(**ref) for ref in LEGAL_REFERENCES],
         )
 
-    eligibility, age_threshold, reduction_reference_offset, eligibility_warnings = determine_eligibility(
-        request, rows, retirement_end
-    )
+    (
+        eligibility,
+        age_threshold,
+        reduction_reference_offset,
+        eligibility_warnings,
+        policy_result,
+    ) = determine_eligibility(request, rows, retirement_end)
     warnings.extend(eligibility_warnings)
+    audit.append(
+        f"Nghề nặng nhọc đã xác nhận: {hazardous_summary.confirmed_hazardous_months} tháng "
+        f"({hazardous_summary.exact_hazardous_duration})."
+    )
+    if policy_result is not None:
+        audit.append(
+            f"Chính sách nghỉ trước tuổi: {policy_result.policy_code}; nghỉ sớm "
+            f"{policy_result.early_retirement_months} tháng; không giảm tỷ lệ: "
+            f"{policy_result.no_reduction_applied}."
+        )
 
     manual = request.retirement_case in {
         RetirementCase.occupational_hiv,
@@ -1129,6 +1345,8 @@ def calculate_pension(request: PensionRequest) -> PensionResponse:
         earliest_normal_pension_start_month=format_year_month(earliest_normal_start),
         history_validation=history,
         contribution_summary=summary,
+        hazardous_summary=hazardous_summary,
+        early_retirement_policy_result=policy_result,
         eligibility=eligibility,
         average_basis=average_result,
         basis_component_audit=basis_component_audit,
@@ -1147,7 +1365,7 @@ def calculate_pension(request: PensionRequest) -> PensionResponse:
 def capabilities() -> CapabilitiesResponse:
     return CapabilitiesResponse(
         service="calculatePension",
-        version="2.2.0",
+        version="2.3.0",
         legal_rule_version=LEGAL_RULE_VERSION,
         built_in_coefficient_years=[2026],
         supported_retirement_cases=[
@@ -1155,9 +1373,12 @@ def capabilities() -> CapabilitiesResponse:
             RetirementCase.hazardous_or_special_region,
             RetirementCase.underground_coal,
             RetirementCase.reduced_capacity,
+            RetirementCase.policy_no_reduction,
         ],
         manual_review_cases=[RetirementCase.occupational_hiv, RetirementCase.armed_forces],
         supported_source_documents=list(SourceDocumentType),
+        supported_early_retirement_policies=list(EarlyRetirementPolicyCode),
+        armed_forces_supported=False,
         notes=[
             "Mẫu 07/SBH có thể gửi theo thành phần; API cộng Mức đóng và 6 cột phụ cấp rồi quy đổi sang VND/tháng.",
             "Bộ hệ số tích hợp sẵn chỉ áp dụng cho năm hưởng 2026.",
@@ -1165,5 +1386,8 @@ def capabilities() -> CapabilitiesResponse:
             "Thời gian được công nhận trước 01/01/1995 nhưng không có lương/sinh hoạt phí dùng credited_duration_only: cộng thời gian, không tính bình quân.",
             "Không loại toàn bộ thời gian trước 1995: tháng có đóng và có tiền lương vẫn xử lý theo chế độ tiền lương tương ứng.",
             "Khoảng trống không có dòng trạng thái vẫn phải được xác nhận.",
+            "Nghề nặng nhọc chỉ được tính khi đối chiếu danh mục, ghi mã nghề và được người dùng xác nhận.",
+            "Hỗ trợ chính sách nghỉ hưu trước tuổi không giảm tỷ lệ theo NĐ 154/2025, NĐ 178/2024 sửa bởi NĐ 67/2025 và NĐ 177/2024 khi có quyết định của cấp có thẩm quyền.",
+            "Không hỗ trợ lực lượng vũ trang; trả manual_review cho armed_forces.",
         ],
     )

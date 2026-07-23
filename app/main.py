@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-import os
-import secrets
-
-from fastapi import Depends, FastAPI, HTTPException, Security, status
+from fastapi import Depends, FastAPI, Header
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.security import APIKeyHeader
-
+from .auth import get_auth_diagnostics, verify_api_key
 from .engine import calculate_pension, capabilities, validate_contribution_history
 from .models import (
     CapabilitiesResponse,
@@ -26,31 +22,17 @@ OPENAPI_TAGS = [
 
 app = FastAPI(
     title="API calculatePension - Tính lương hưu BHXH",
-    version="2.2.0",
+    version="2.3.0",
     description=(
         "API dự tính lương hưu BHXH Việt Nam, hỗ trợ dữ liệu chuẩn hóa từ Mẫu 07/SBH, "
         "kiểm tra tháng trống/trùng, trạng thái không tham gia, thời gian chỉ cộng thời gian, tổng hợp Mức đóng và 6 cột phụ cấp của Mẫu 07/SBH, quá trình hỗn hợp và bộ hệ số theo năm hưởng. "
-        "Kết quả chỉ mang tính tham khảo."
+        "Hỗ trợ xác nhận nghề nặng nhọc và chính sách nghỉ trước tuổi không giảm tỷ lệ; không áp dụng cho lực lượng vũ trang. Kết quả chỉ mang tính tham khảo."
     ),
     contact={"name": "Quản trị viên calculatePension"},
     openapi_tags=OPENAPI_TAGS,
     docs_url=None,
     redoc_url=None,
 )
-
-
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-
-
-def verify_api_key(x_api_key: str | None = Security(api_key_header)) -> None:
-    expected = os.getenv("API_KEY")
-    if not expected:
-        return
-    if not x_api_key or not secrets.compare_digest(x_api_key, expected):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Thiếu hoặc sai khóa X-API-Key.",
-        )
 
 
 @app.get("/", include_in_schema=False)
@@ -88,7 +70,28 @@ def privacy_policy() -> HTMLResponse:
     summary="Kiểm tra trạng thái API",
 )
 def health() -> dict[str, str]:
-    return {"status": "ok", "service": "calculatePension", "version": "2.2.0"}
+    return {"status": "ok", "service": "calculatePension", "version": "2.3.0"}
+
+
+@app.get(
+    "/v1/authDiagnostics",
+    operation_id="checkApiKeyDiagnostics",
+    tags=["Hệ thống"],
+    summary="Chẩn đoán header X-API-Key an toàn",
+    description=(
+        "Chỉ hoạt động khi AUTH_DIAGNOSTICS_ENABLED=true. "
+        "Không trả khóa bí mật; chỉ trả độ dài, dấu vân tay SHA-256 rút gọn "
+        "và kết quả so khớp để chẩn đoán cấu hình Render/GPT."
+    ),
+)
+def auth_diagnostics(
+    x_api_key: str | None = Header(
+        default=None,
+        alias="X-API-Key",
+        include_in_schema=False,
+    ),
+) -> dict[str, object]:
+    return get_auth_diagnostics(x_api_key)
 
 
 @app.get(

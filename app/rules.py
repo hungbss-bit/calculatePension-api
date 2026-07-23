@@ -10,7 +10,8 @@ LEGAL_RULE_VERSION = (
     "+ND159/2025/ND-CP"
     "+TT12/2025/TT-BNV"
     "+ND135/2020/ND-CP"
-    "+BHXH-340/CSXH-2026+PRE1995-NO-SALARY-DURATION-ONLY+MAU07-COMPONENT-SUM-V2"
+    "+BHXH-340/CSXH-2026+TT11/2020+TT19/2023+ND154/2025"
+    "+ND178/2024+ND67/2025+ND177/2024+HAZARDOUS-CONFIRMATION-V1"
 )
 
 LEGAL_REFERENCES = [
@@ -42,6 +43,26 @@ LEGAL_REFERENCES = [
         "document": "Nghị định 135/2020/NĐ-CP",
         "provisions": "Lộ trình tuổi nghỉ hưu",
         "purpose": "Xác định tuổi nghỉ hưu theo năm nghỉ.",
+    },
+    {
+        "document": "Thông tư 11/2020/TT-BLĐTBXH và Thông tư 19/2023/TT-BLĐTBXH",
+        "provisions": "Danh mục nghề, công việc nặng nhọc, độc hại, nguy hiểm",
+        "purpose": "Đối chiếu tên nghề/công việc, phân loại IV, V, VI và thời gian thực tế trước khi xác nhận tháng đủ điều kiện.",
+    },
+    {
+        "document": "Nghị định 154/2025/NĐ-CP",
+        "provisions": "Chính sách nghỉ hưu trước tuổi do tinh giản biên chế",
+        "purpose": "Xác định trường hợp không bị trừ tỷ lệ do nghỉ trước tuổi khi có quyết định của cấp có thẩm quyền.",
+    },
+    {
+        "document": "Nghị định 178/2024/NĐ-CP được sửa đổi bởi Nghị định 67/2025/NĐ-CP",
+        "provisions": "Chính sách khi sắp xếp tổ chức bộ máy",
+        "purpose": "Xác định trường hợp nghỉ hưu trước tuổi không giảm tỷ lệ theo phương án và quyết định đã phê duyệt.",
+    },
+    {
+        "document": "Nghị định 177/2024/NĐ-CP",
+        "provisions": "Chính sách đối với trường hợp không tái cử, tái bổ nhiệm",
+        "purpose": "Xác định trường hợp dân sự đủ điều kiện nghỉ trước tuổi không giảm tỷ lệ; không áp dụng tự động cho lực lượng vũ trang.",
     },
     {
         "document": "Công văn 340/BHXH-CSXH ngày 03/02/2026",
