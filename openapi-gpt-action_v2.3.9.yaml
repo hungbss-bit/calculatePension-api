@@ -1,0 +1,178 @@
+openapi: 3.1.0
+info:
+  title: calculatePension API
+  version: 2.3.9
+  description: API hỗ trợ dự tính lương hưu BHXH dân sự.
+
+servers:
+  - url: https://calculatepension-api.onrender.com
+
+paths:
+  /health:
+    get:
+      operationId: checkPensionApiHealth
+      summary: Kiểm tra trạng thái API
+      description: Kiểm tra API hoạt động trước khi sử dụng.
+      responses:
+        "200":
+          description: API đang hoạt động.
+
+  /v1/validateContributionHistory:
+    post:
+      operationId: validateContributionHistory
+      summary: Kiểm tra quá trình đóng BHXH
+      description: Kiểm tra dữ liệu BHXH đã chuẩn hóa, loại BHTN và kiểm tra nghề nặng nhọc.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContributionValidationRequest"
+      responses:
+        "200":
+          description: Kết quả kiểm tra dữ liệu.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContributionValidationResponse"
+
+  /v1/calculatePension:
+    post:
+      operationId: calculatePension
+      summary: Tính lương hưu dự kiến
+      description: Tính điều kiện hưởng, tỷ lệ, mức bình quân và mức lương hưu dự kiến từ dữ liệu BHXH hợp lệ.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PensionRequest"
+      responses:
+        "200":
+          description: Kết quả tính lương hưu.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PensionResponse"
+
+components:
+  schemas:
+
+    ContributionValidationRequest:
+      type: object
+      properties:
+        person:
+          type: object
+        contributions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContributionPeriod"
+
+    ContributionValidationResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            type: string
+        contribution_summary:
+          type: object
+
+    PensionRequest:
+      type: object
+      required:
+        - person
+        - pension_start_month
+        - contributions
+      properties:
+        person:
+          type: object
+          properties:
+            gender:
+              type: string
+            date_of_birth:
+              type: string
+
+        pension_start_month:
+          type: string
+
+        retirement_case:
+          type: string
+          enum:
+            - normal
+            - hazardous_or_special_region
+            - underground_coal
+            - reduced_capacity
+            - policy_no_reduction
+            - occupational_hiv
+            - armed_forces
+
+        contributions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContributionPeriod"
+
+        early_retirement_policy:
+          type: object
+
+    ContributionPeriod:
+      type: object
+      properties:
+        from_month:
+          type: string
+        to_month:
+          type: string
+        contribution_type:
+          type: string
+          enum:
+            - compulsory_state
+            - compulsory_employer
+            - voluntary
+        basis_input_type:
+          type: string
+          enum:
+            - total_vnd
+            - converted_state_vnd
+            - component_sum_vnd
+            - mau_07_sbh_components
+            - salary_coefficient
+        monthly_basis_vnd:
+          type: number
+        include_pension:
+          type: boolean
+        sbh_components:
+          $ref: "#/components/schemas/Mau07SbhComponents"
+
+    Mau07SbhComponents:
+      type: object
+      properties:
+        base_value:
+          type: number
+        position_allowance:
+          type: number
+        professional_seniority_allowance:
+          type: number
+        seniority_beyond_frame_allowance:
+          type: number
+        regional_allowance:
+          type: number
+        other_allowance:
+          type: number
+
+    PensionResponse:
+      type: object
+      properties:
+        eligibility:
+          type: object
+        average_basis:
+          type: object
+        pension_rate:
+          type: number
+        estimated_monthly_pension_vnd:
+          type: number
+        warnings:
+          type: array
+          items:
+            type: string

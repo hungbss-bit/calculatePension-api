@@ -1,0 +1,143 @@
+openapi: 3.1.0
+info:
+  title: calculatePension API
+  version: 2.3.8
+  description: API hỗ trợ dự tính lương hưu BHXH dân sự.
+
+servers:
+  - url: https://calculatepension-api.onrender.com
+
+paths:
+  /health:
+    get:
+      operationId: checkPensionApiHealth
+      summary: Kiểm tra trạng thái API
+      description: Kiểm tra API hoạt động trước khi sử dụng.
+      responses:
+        "200":
+          description: API đang hoạt động.
+
+  /v1/validateContributionHistory:
+    post:
+      operationId: validateContributionHistory
+      summary: Kiểm tra quá trình BHXH
+      description: Kiểm tra dữ liệu BHXH đã chuẩn hóa, loại BHTN và kiểm tra nghề nặng nhọc.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContributionValidationRequest"
+      responses:
+        "200":
+          description: Kết quả kiểm tra dữ liệu.
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/calculatePension:
+    post:
+      operationId: calculatePension
+      summary: Tính lương hưu dự kiến
+      description: Tính điều kiện hưởng, tỷ lệ, mức bình quân và lương hưu dự kiến từ dữ liệu BHXH hợp lệ.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PensionRequest"
+      responses:
+        "200":
+          description: Kết quả tính lương hưu.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PensionResponse"
+
+components:
+  schemas:
+
+    ContributionValidationRequest:
+      type: object
+      description: Dữ liệu quá trình đóng BHXH đã chuẩn hóa.
+      properties:
+        contributions:
+          type: array
+          items:
+            type: object
+
+    PensionRequest:
+      type: object
+      description: Dữ liệu đầu vào để tính lương hưu.
+      required:
+        - person
+        - pension_start_month
+        - contributions
+      properties:
+
+        person:
+          type: object
+          properties:
+            gender:
+              type: string
+            date_of_birth:
+              type: string
+
+        pension_start_month:
+          type: string
+          description: Tháng bắt đầu hưởng lương hưu dự kiến.
+
+        retirement_case:
+          type: string
+          description: GPT tự xác định trường hợp nghỉ hưu khi cần.
+          enum:
+            - normal
+            - hazardous_or_special_region
+            - underground_coal
+            - reduced_capacity
+            - policy_no_reduction
+            - occupational_hiv
+            - armed_forces
+
+        contributions:
+          type: array
+          description: Chỉ gửi thời gian BHXH hợp lệ sau khi loại BHTN.
+          items:
+            type: object
+            properties:
+              from_month:
+                type: string
+              to_month:
+                type: string
+              contribution_type:
+                type: string
+              basis_input_type:
+                type: string
+              monthly_basis_vnd:
+                type: number
+              sbh_components:
+                type: object
+              include_pension:
+                type: boolean
+
+        early_retirement_policy:
+          type: object
+          description: Chỉ dùng khi nghỉ trước tuổi không giảm tỷ lệ theo chính sách đặc biệt.
+
+    PensionResponse:
+      type: object
+      description: Kết quả tính lương hưu.
+      properties:
+        eligibility:
+          type: object
+        average_basis:
+          type: object
+        pension_rate:
+          type: number
+        estimated_monthly_pension_vnd:
+          type: number
+        warnings:
+          type: array
+          items:
+            type: string

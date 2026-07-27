@@ -1,0 +1,433 @@
+openapi: 3.1.0
+
+info:
+
+  title: calculatePension API
+
+  description:
+    API dự tính lương hưu BHXH Việt Nam
+
+  version: "3.0"
+
+
+paths:
+
+
+  /validateContributionHistory:
+
+
+    post:
+
+
+      operationId:
+
+        validateContributionHistory
+
+
+      summary:
+
+        Kiểm tra dữ liệu quá trình đóng BHXH
+
+
+      requestBody:
+
+
+        required:
+
+          true
+
+
+        content:
+
+
+          application/json:
+
+
+            schema:
+
+
+              $ref:
+
+                "#/components/schemas/PensionCalculationRequest"
+
+
+
+      responses:
+
+
+        "200":
+
+          description:
+
+            Validation result
+
+
+
+  /calculatePension:
+
+
+    post:
+
+
+      operationId:
+
+        calculatePension
+
+
+      summary:
+
+        Tính mức lương hưu dự tính
+
+
+
+      requestBody:
+
+
+        required:
+
+          true
+
+
+        content:
+
+
+          application/json:
+
+
+            schema:
+
+
+              $ref:
+
+                "#/components/schemas/PensionCalculationRequest"
+
+
+
+      responses:
+
+
+        "200":
+
+          description:
+
+            Pension result
+
+
+
+
+components:
+
+
+  schemas:
+
+
+
+    PensionCalculationRequest:
+
+
+      type:
+
+        object
+
+
+
+      required:
+
+
+        - person
+
+        - pension_start_month
+
+        - contributions
+
+
+
+      properties:
+
+
+
+        person:
+
+
+          type:
+
+            object
+
+
+          required:
+
+
+            - date_of_birth
+
+            - sex
+
+
+
+          properties:
+
+
+
+            date_of_birth:
+
+
+              type:
+
+                string
+
+
+              example:
+
+                "1971-10-15"
+
+
+
+            sex:
+
+
+              type:
+
+                string
+
+
+              enum:
+
+
+                - male
+
+                - female
+
+
+
+
+        pension_start_month:
+
+
+          type:
+
+            string
+
+
+          example:
+
+            "2026-08"
+
+
+
+        retirement_case:
+
+
+          type:
+
+            string
+
+
+          enum:
+
+
+            - normal
+
+            - hazardous_or_special_region
+
+            - reduced_capacity
+
+            - policy_no_reduction
+
+
+
+
+        contributions:
+
+
+          type:
+
+            array
+
+
+
+          items:
+
+
+            type:
+
+              object
+
+
+
+            required:
+
+
+              - from_month
+
+              - to_month
+
+              - contribution_type
+
+              - participation_status
+
+
+
+            properties:
+
+
+
+              from_month:
+
+
+                type:
+
+                  string
+
+
+
+              to_month:
+
+
+                type:
+
+                  string
+
+
+
+              contribution_type:
+
+
+                type:
+
+                  string
+
+
+                enum:
+
+
+                  - compulsory_state
+
+                  - compulsory_employer
+
+                  - voluntary
+
+
+
+              participation_status:
+
+
+                type:
+
+                  string
+
+
+                enum:
+
+
+                  - contributed
+
+                  - credited_duration_only
+
+                  - not_participating
+
+
+
+              basis_input_type:
+
+
+                type:
+
+                  string
+
+
+                example:
+
+
+                  mau_07_sbh_components
+
+
+
+              sbh_components:
+
+
+                type:
+
+                  object
+
+
+
+                properties:
+
+
+
+                  unit:
+
+
+                    type:
+
+                      string
+
+
+                    enum:
+
+
+                      - coefficient
+
+                      - vnd
+
+
+
+                  base_value:
+
+
+                    type:
+
+                      number
+
+
+
+                  position_allowance:
+
+
+                    type:
+
+                      number
+
+
+
+                  seniority_beyond_frame_allowance:
+
+
+                    type:
+
+                      number
+
+
+
+                  professional_seniority_allowance:
+
+
+                    type:
+
+                      number
+
+
+
+                  regional_allowance:
+
+
+                    type:
+
+                      number
+
+
+
+                  other_allowance:
+
+
+                    type:
+
+                      number
+
+
+
+                  reelection_allowance:
+
+
+                    type:
+
+                      number

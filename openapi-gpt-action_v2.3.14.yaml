@@ -1,0 +1,101 @@
+openapi: 3.1.0
+info:
+  title: calculatePension API
+  version: 2.3.5
+  description: API hỗ trợ dự tính lương hưu BHXH dân sự.
+
+servers:
+  - url: https://calculatepension-api.onrender.com
+
+paths:
+  /health:
+    get:
+      operationId: checkPensionApiHealth
+      summary: Kiểm tra trạng thái API
+      description: Kiểm tra API hoạt động trước khi tính toán.
+      responses:
+        "200":
+          description: API đang hoạt động.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /v1/validateContributionHistory:
+    post:
+      operationId: validateContributionHistory
+      summary: Kiểm tra quá trình BHXH
+      description: Kiểm tra dữ liệu BHXH đã chuẩn hóa, loại BHTN và xác nhận nghề nặng nhọc.
+      responses:
+        "200":
+          description: Kết quả kiểm tra.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+
+  /v1/calculatePension:
+    post:
+      operationId: calculatePension
+      summary: Tính lương hưu dự kiến
+      description: Tính điều kiện hưởng, tỷ lệ, mức bình quân và mức lương hưu dự kiến từ dữ liệu BHXH hợp lệ.
+      responses:
+        "200":
+          description: Kết quả tính toán.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  estimated_monthly_pension_vnd:
+                    type: number
+
+components:
+  schemas:
+    PensionRequest:
+      type: object
+      required:
+        - person
+        - pension_start_month
+        - contributions
+      properties:
+        person:
+          type: object
+        pension_start_month:
+          type: string
+          description: Tháng bắt đầu hưởng lương hưu dự kiến.
+
+        retirement_case:
+          type: string
+          description: GPT tự xác định trường hợp nghỉ hưu khi cần.
+          enum:
+            - normal
+            - hazardous_or_special_region
+            - underground_coal
+            - reduced_capacity
+            - policy_no_reduction
+            - occupational_hiv
+            - armed_forces
+
+        contribution_type:
+          type: string
+          description: Loại tiền lương đóng BHXH.
+          enum:
+            - state_salary
+            - enterprise_salary
+
+        contributions:
+          type: array
+          description: Chỉ gửi giai đoạn BHXH sau khi đã loại BHTN.
+          items:
+            type: object
+
+        early_retirement_policy:
+          type: object
+          description: Chỉ dùng khi nghỉ trước tuổi không giảm tỷ lệ theo chính sách đặc biệt.
