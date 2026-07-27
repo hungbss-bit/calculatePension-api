@@ -1,0 +1,350 @@
+openapi: 3.1.0
+info:
+  title: calculatePension API
+  version: "3.1.0"
+  description: >
+    Schema Action cho calculatePension. Cấu hình GPT V66, bám theo API 3.1.0
+    và luồng validateContributionHistory -> calculatePension.
+  x-gpt-config-version: "V66"
+
+servers:
+  - url: https://calculatepension-api.onrender.com
+
+paths:
+  /validateContributionHistory:
+    post:
+      operationId: validateContributionHistory
+      summary: Kiểm tra lịch sử đóng BHXH trước khi tính lương hưu
+      description: >
+        Nhận PensionCalculationRequest đã chuẩn hóa. GPT phải gọi operation này
+        trước calculatePension và chỉ tiếp tục khi response.validation = true.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PensionCalculationRequest"
+      responses:
+        "200":
+          description: Kết quả kiểm tra dữ liệu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResponse"
+        "400":
+          description: Dữ liệu request không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Dữ liệu không vượt qua kiểm tra nghiệp vụ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Lỗi xử lý phía API
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /calculatePension:
+    post:
+      operationId: calculatePension
+      summary: Dự tính lương hưu
+      description: >
+        Chỉ gọi sau khi validateContributionHistory trả validation = true.
+        Không gọi với contributions rỗng.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PensionCalculationRequest"
+      responses:
+        "200":
+          description: Kết quả dự tính lương hưu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PensionCalculationResponse"
+        "400":
+          description: Dữ liệu request không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Dữ liệu không đủ/không hợp lệ để tính
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Lỗi xử lý phía API
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    PensionCalculationRequest:
+      type: object
+      required:
+        - person
+        - pension_start_month
+        - retirement_case
+        - contributions
+      properties:
+        person:
+          $ref: "#/components/schemas/Person"
+
+        pension_start_month:
+          type: string
+          pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+          description: Tháng bắt đầu hưởng lương hưu, định dạng YYYY-MM
+          examples:
+            - "2026-10"
+
+        retirement_case:
+          type: string
+          enum:
+            - normal
+            - hazardous_or_special_region
+            - underground_coal
+            - reduced_capacity
+          description: Trường hợp nghỉ hưu
+
+        impairment_percent:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: >
+            Tỷ lệ suy giảm khả năng lao động; chỉ gửi khi có căn cứ và trường hợp
+            nghỉ hưu cần dữ liệu này.
+
+        contributions:
+          type: array
+          minItems: 1
+          description: >
+            Các giai đoạn BHXH đã chuẩn hóa. Dòng BHTN phải loại trước khi gọi
+            calculatePension theo Instructions V66.
+          items:
+            $ref: "#/components/schemas/ContributionPeriod"
+
+    Person:
+      type: object
+      required:
+        - date_of_birth
+        - sex
+      properties:
+        date_of_birth:
+          type: string
+          format: date
+          description: Ngày sinh, định dạng YYYY-MM-DD
+          examples:
+            - "1969-09-01"
+
+        sex:
+          type: string
+          enum:
+            - male
+            - female
+          description: Giới tính
+
+    ContributionPeriod:
+      type: object
+      required:
+        - from_month
+        - to_month
+        - participation_status
+      properties:
+        from_month:
+          type: string
+          pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+          description: Tháng bắt đầu, định dạng YYYY-MM
+          examples:
+            - "2010-01"
+
+        to_month:
+          type: string
+          pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+          description: Tháng kết thúc, định dạng YYYY-MM
+          examples:
+            - "2012-12"
+
+        participation_status:
+          type: string
+          enum:
+            - contributed
+            - credited_duration_only
+            - not_participating
+          description: >
+            contributed = có đóng BHXH; credited_duration_only = chỉ cộng thời gian
+            theo căn cứ hợp lệ; not_participating = không tham gia.
+
+        duration_only_reason:
+          type: string
+          enum:
+            - pre1995_no_salary_or_living_allowance
+          description: >
+            Bắt buộc về nghiệp vụ khi participation_status = credited_duration_only.
+
+        contribution_type:
+          type: string
+          enum:
+            - compulsory_state
+            - compulsory_employer
+            - voluntary
+          description: Loại chế độ đóng BHXH.
+
+        basis_input_type:
+          type: string
+          enum:
+            - mau_07_sbh_components
+            - monthly_basis_vnd
+          description: >
+            Với Mẫu 07/SBH dùng mau_07_sbh_components. Khi đã có tổng VND/tháng
+            được xác nhận thì dùng monthly_basis_vnd.
+
+        monthly_basis_vnd:
+          type: number
+          minimum: 0
+          description: >
+            Tổng mức làm căn cứ đóng bằng VND/tháng khi nhập trực tiếp.
+            Không gửi cùng sbh_components.
+
+        sbh_components:
+          $ref: "#/components/schemas/SbhComponents"
+
+    SbhComponents:
+      type: object
+      required:
+        - unit
+        - base_value
+      properties:
+        unit:
+          type: string
+          enum:
+            - coefficient
+            - vnd
+          description: Đơn vị chung của toàn bộ thành phần.
+
+        base_value:
+          type: number
+          minimum: 0
+          description: Giá trị cột Mức đóng.
+
+        position_allowance:
+          type: number
+          minimum: 0
+          default: 0
+          description: Phụ cấp chức vụ.
+
+        seniority_beyond_frame_allowance:
+          type: number
+          minimum: 0
+          default: 0
+          description: TN VK đã chuẩn hóa về cùng đơn vị.
+
+        professional_seniority_allowance:
+          type: number
+          minimum: 0
+          default: 0
+          description: TN Nghề đã chuẩn hóa về cùng đơn vị.
+
+        regional_allowance:
+          type: number
+          minimum: 0
+          default: 0
+          description: Phụ cấp khu vực đã chuẩn hóa về cùng đơn vị.
+
+        other_allowance:
+          type: number
+          minimum: 0
+          default: 0
+          description: Cột Khác.
+
+        reelection_allowance:
+          type: number
+          minimum: 0
+          default: 0
+          description: Cột Tái cử.
+
+    ValidationResponse:
+      type: object
+      required:
+        - validation
+      properties:
+        validation:
+          type: boolean
+          description: true nếu lịch sử đóng hợp lệ để tiếp tục tính.
+
+        detail:
+          type: string
+          description: Chi tiết validation hoặc lỗi nghiệp vụ.
+
+        error_code:
+          type: string
+          description: Mã lỗi nghiệp vụ nếu có.
+
+        field:
+          type: string
+          description: Trường dữ liệu cần sửa/xác minh nếu có.
+
+    PensionCalculationResponse:
+      type: object
+      required:
+        - total_months
+        - average_salary
+        - replacement_rate
+        - early_retirement_reduction
+        - estimated_pension
+        - warnings
+      properties:
+        total_months:
+          type: integer
+          minimum: 0
+          description: Tổng số tháng BHXH được dùng theo kết quả API.
+
+        average_salary:
+          type: number
+          minimum: 0
+          description: Mức bình quân tiền lương/thu nhập theo kết quả API.
+
+        replacement_rate:
+          type: number
+          minimum: 0
+          description: Tỷ lệ hưởng theo kết quả API.
+
+        early_retirement_reduction:
+          type: number
+          minimum: 0
+          description: Mức giảm do nghỉ trước tuổi theo kết quả API.
+
+        estimated_pension:
+          type: number
+          minimum: 0
+          description: Lương hưu dự tính theo kết quả API.
+
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Các cảnh báo từ API.
+
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Chi tiết lỗi do API trả về.
+        error_code:
+          type: string
+          description: Mã lỗi nếu API cung cấp.
+        field:
+          type: string
+          description: Trường dữ liệu liên quan đến lỗi nếu API cung cấp.

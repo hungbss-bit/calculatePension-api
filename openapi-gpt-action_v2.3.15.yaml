@@ -1,433 +1,256 @@
 openapi: 3.1.0
-
 info:
-
   title: calculatePension API
-
-  description:
-    API dự tính lương hưu BHXH Việt Nam
-
-  version: "3.0"
-
-
+  version: 3.1.0
+servers:
+  - url: https://calculatepension-api.onrender.com
 paths:
 
-
   /validateContributionHistory:
-
-
     post:
-
-
-      operationId:
-
-        validateContributionHistory
-
-
-      summary:
-
-        Kiểm tra dữ liệu quá trình đóng BHXH
-
-
+      operationId: validateContributionHistory
+      summary: Kiểm tra lịch sử đóng BHXH trước khi tính lương hưu
       requestBody:
-
-
-        required:
-
-          true
-
-
+        required: true
         content:
-
-
           application/json:
-
-
             schema:
-
-
-              $ref:
-
-                "#/components/schemas/PensionCalculationRequest"
-
-
-
+              $ref: "#/components/schemas/PensionCalculationRequest"
       responses:
-
-
         "200":
-
-          description:
-
-            Validation result
-
-
+          description: Kết quả kiểm tra dữ liệu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResponse"
 
   /calculatePension:
-
-
     post:
-
-
-      operationId:
-
-        calculatePension
-
-
-      summary:
-
-        Tính mức lương hưu dự tính
-
-
-
+      operationId: calculatePension
+      summary: Dự tính lương hưu
       requestBody:
-
-
-        required:
-
-          true
-
-
+        required: true
         content:
-
-
           application/json:
-
-
             schema:
-
-
-              $ref:
-
-                "#/components/schemas/PensionCalculationRequest"
-
-
-
+              $ref: "#/components/schemas/PensionCalculationRequest"
       responses:
-
-
         "200":
-
-          description:
-
-            Pension result
-
-
+          description: Kết quả dự tính lương hưu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PensionCalculationResponse"
 
 
 components:
-
-
   schemas:
 
-
-
     PensionCalculationRequest:
-
-
-      type:
-
-        object
-
-
-
+      type: object
       required:
-
-
         - person
-
         - pension_start_month
-
+        - retirement_case
         - contributions
-
-
-
       properties:
 
-
-
         person:
-
-
-          type:
-
-            object
-
-
-          required:
-
-
-            - date_of_birth
-
-            - sex
-
-
-
-          properties:
-
-
-
-            date_of_birth:
-
-
-              type:
-
-                string
-
-
-              example:
-
-                "1971-10-15"
-
-
-
-            sex:
-
-
-              type:
-
-                string
-
-
-              enum:
-
-
-                - male
-
-                - female
-
-
-
+          $ref: "#/components/schemas/Person"
 
         pension_start_month:
-
-
-          type:
-
-            string
-
-
-          example:
-
-            "2026-08"
-
-
+          type: string
+          description: Tháng bắt đầu hưởng lương hưu, định dạng YYYY-MM
+          example: "2026-10"
 
         retirement_case:
-
-
-          type:
-
-            string
-
-
+          type: string
           enum:
-
-
             - normal
-
             - hazardous_or_special_region
-
+            - underground_coal
             - reduced_capacity
+          description: Trường hợp nghỉ hưu
 
-            - policy_no_reduction
-
-
-
+        impairment_percent:
+          type: number
+          description: Tỷ lệ suy giảm khả năng lao động, chỉ dùng khi có căn cứ
+          minimum: 0
+          maximum: 100
 
         contributions:
-
-
-          type:
-
-            array
-
-
-
+          type: array
+          minItems: 1
           items:
+            $ref: "#/components/schemas/ContributionPeriod"
+
+
+    Person:
+      type: object
+      required:
+        - date_of_birth
+        - sex
+      properties:
+
+        date_of_birth:
+          type: string
+          format: date
+          description: Ngày sinh
+          example: "1969-09-01"
+
+        sex:
+          type: string
+          enum:
+            - male
+            - female
+          description: Giới tính
+
+
+    ContributionPeriod:
+      type: object
+      required:
+        - from_month
+        - to_month
+        - participation_status
+      properties:
+
+        from_month:
+          type: string
+          description: Tháng bắt đầu, định dạng YYYY-MM
+          example: "2010-01"
+
+        to_month:
+          type: string
+          description: Tháng kết thúc, định dạng YYYY-MM
+          example: "2012-12"
+
+        participation_status:
+          type: string
+          enum:
+            - contributed
+            - credited_duration_only
+            - not_participating
+
+        duration_only_reason:
+          type: string
+          enum:
+            - pre1995_no_salary_or_living_allowance
+
+        contribution_type:
+          type: string
+          enum:
+            - compulsory_state
+            - compulsory_employer
+            - voluntary
+
+        basis_input_type:
+          type: string
+          description: Cách cung cấp mức làm căn cứ đóng
+          enum:
+            - mau_07_sbh_components
+            - monthly_basis_vnd
+
+        monthly_basis_vnd:
+          type: number
+          description: Tổng mức làm căn cứ đóng bằng VND/tháng khi nhập trực tiếp
+          minimum: 0
+
+        sbh_components:
+          $ref: "#/components/schemas/SbhComponents"
+
+
+    SbhComponents:
+      type: object
+      required:
+        - unit
+        - base_value
+      properties:
+
+        unit:
+          type: string
+          enum:
+            - coefficient
+            - vnd
+
+        base_value:
+          type: number
+          minimum: 0
+          description: Giá trị cột Mức đóng
+
+        position_allowance:
+          type: number
+          minimum: 0
+          default: 0
+
+        seniority_beyond_frame_allowance:
+          type: number
+          minimum: 0
+          default: 0
 
+        professional_seniority_allowance:
+          type: number
+          minimum: 0
+          default: 0
 
-            type:
+        regional_allowance:
+          type: number
+          minimum: 0
+          default: 0
 
-              object
+        other_allowance:
+          type: number
+          minimum: 0
+          default: 0
 
+        reelection_allowance:
+          type: number
+          minimum: 0
+          default: 0
 
 
-            required:
+    ValidationResponse:
+      type: object
+      required:
+        - validation
+      properties:
 
+        validation:
+          type: boolean
+          description: true nếu lịch sử đóng hợp lệ
 
-              - from_month
+        detail:
+          type: string
 
-              - to_month
+        error_code:
+          type: string
 
-              - contribution_type
+        field:
+          type: string
 
-              - participation_status
 
+    PensionCalculationResponse:
+      type: object
+      properties:
 
+        total_months:
+          type: integer
+          minimum: 0
 
-            properties:
+        average_salary:
+          type: number
+          minimum: 0
 
+        replacement_rate:
+          type: number
 
+        early_retirement_reduction:
+          type: number
 
-              from_month:
+        estimated_pension:
+          type: number
+          minimum: 0
 
-
-                type:
-
-                  string
-
-
-
-              to_month:
-
-
-                type:
-
-                  string
-
-
-
-              contribution_type:
-
-
-                type:
-
-                  string
-
-
-                enum:
-
-
-                  - compulsory_state
-
-                  - compulsory_employer
-
-                  - voluntary
-
-
-
-              participation_status:
-
-
-                type:
-
-                  string
-
-
-                enum:
-
-
-                  - contributed
-
-                  - credited_duration_only
-
-                  - not_participating
-
-
-
-              basis_input_type:
-
-
-                type:
-
-                  string
-
-
-                example:
-
-
-                  mau_07_sbh_components
-
-
-
-              sbh_components:
-
-
-                type:
-
-                  object
-
-
-
-                properties:
-
-
-
-                  unit:
-
-
-                    type:
-
-                      string
-
-
-                    enum:
-
-
-                      - coefficient
-
-                      - vnd
-
-
-
-                  base_value:
-
-
-                    type:
-
-                      number
-
-
-
-                  position_allowance:
-
-
-                    type:
-
-                      number
-
-
-
-                  seniority_beyond_frame_allowance:
-
-
-                    type:
-
-                      number
-
-
-
-                  professional_seniority_allowance:
-
-
-                    type:
-
-                      number
-
-
-
-                  regional_allowance:
-
-
-                    type:
-
-                      number
-
-
-
-                  other_allowance:
-
-
-                    type:
-
-                      number
-
-
-
-                  reelection_allowance:
-
-
-                    type:
-
-                      number
+        warnings:
+          type: array
+          items:
+            type: string

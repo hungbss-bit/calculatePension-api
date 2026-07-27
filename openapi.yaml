@@ -1,0 +1,196 @@
+openapi: 3.1.0
+info:
+  title: calculatePension API
+  version: 3.2.0
+  description: API kiểm tra lịch sử đóng BHXH và dự tính lương hưu Việt Nam.
+
+servers:
+  - url: https://calculatepension-api.onrender.com
+
+paths:
+  /validateContributionHistory:
+    post:
+      operationId: validateContributionHistory
+      summary: Kiểm tra lịch sử đóng BHXH trước khi tính lương hưu
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PensionRequest"
+      responses:
+        "200":
+          description: Kết quả kiểm tra
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResponse"
+
+  /calculatePension:
+    post:
+      operationId: calculatePension
+      summary: Dự tính lương hưu
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PensionRequest"
+      responses:
+        "200":
+          description: Kết quả tính
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PensionResponse"
+
+components:
+  schemas:
+    Person:
+      type: object
+      required:
+        - date_of_birth
+        - sex
+      properties:
+        date_of_birth:
+          type: string
+          format: date
+        sex:
+          type: string
+          enum: [male, female]
+
+    PensionRequest:
+      type: object
+      required:
+        - person
+        - pension_start_month
+        - retirement_case
+        - contributions
+      properties:
+        person:
+          $ref: "#/components/schemas/Person"
+        pension_start_month:
+          type: string
+          pattern: "^\\d{4}-\\d{2}$"
+        retirement_case:
+          type: string
+          enum:
+            - normal
+            - hazardous_or_special_region
+            - underground_coal
+            - reduced_capacity
+        impairment_percent:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: Chỉ gửi khi retirement_case=reduced_capacity.
+        contributions:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/ContributionPeriod"
+
+    ContributionPeriod:
+      type: object
+      required:
+        - from_month
+        - to_month
+        - participation_status
+      properties:
+        from_month:
+          type: string
+        to_month:
+          type: string
+        participation_status:
+          type: string
+          enum:
+            - contributed
+            - credited_duration_only
+            - not_participating
+        duration_only_reason:
+          type: string
+          enum:
+            - pre1995_no_salary_or_living_allowance
+        contribution_type:
+          type: string
+          enum:
+            - compulsory_state
+            - compulsory_employer
+            - voluntary
+        basis_input_type:
+          type: string
+          enum:
+            - mau_07_sbh_components
+            - monthly_basis_vnd
+        monthly_basis_vnd:
+          type: number
+        sbh_components:
+          $ref: "#/components/schemas/SbhComponents"
+
+    SbhComponents:
+      type: object
+      required:
+        - unit
+        - base_value
+      properties:
+        unit:
+          type: string
+          enum: [coefficient, vnd]
+        base_value:
+          type: number
+        position_allowance:
+          type: number
+          default: 0
+        seniority_beyond_frame_allowance:
+          type: number
+          default: 0
+        professional_seniority_allowance:
+          type: number
+          default: 0
+        regional_allowance:
+          type: number
+          default: 0
+        other_allowance:
+          type: number
+          default: 0
+        reelection_allowance:
+          type: number
+          default: 0
+
+    ValidationResponse:
+      type: object
+      required:
+        - validation
+      properties:
+        validation:
+          type: boolean
+        detail:
+          type: string
+        error_code:
+          type: string
+        field:
+          type: string
+
+    PensionResponse:
+      type: object
+      required:
+        - total_months
+        - average_salary
+        - replacement_rate
+        - estimated_pension
+      properties:
+        total_months:
+          type: integer
+        average_salary:
+          type: number
+        replacement_rate:
+          type: number
+        early_retirement_reduction:
+          type: number
+        estimated_pension:
+          type: number
+        warnings:
+          type: array
+          items:
+            type: string
