@@ -1,0 +1,40 @@
+{
+  "source_file": "DM_04_So_nam_binh_quan_luong_Nha_nuoc.xlsx",
+  "windows": [
+    {
+      "from": "0001-01",
+      "to": "1994-12",
+      "months": 60
+    },
+    {
+      "from": "1995-01",
+      "to": "2000-12",
+      "months": 72
+    },
+    {
+      "from": "2001-01",
+      "to": "2006-12",
+      "months": 96
+    },
+    {
+      "from": "2007-01",
+      "to": "2015-12",
+      "months": 120
+    },
+    {
+      "from": "2016-01",
+      "to": "2019-12",
+      "months": 180
+    },
+    {
+      "from": "2020-01",
+      "to": "2024-12",
+      "months": 240
+    },
+    {
+      "from": "2025-01",
+      "to": "9999-12",
+      "months": null
+    }
+  ]
+}

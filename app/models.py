@@ -5,9 +5,13 @@ from decimal import Decimal
 from enum import Enum
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
-YEAR_MONTH_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
+YEAR_MONTH_PATTERN = r"^[0-9]{4}-(0[1-9]|1[0-2])$"
+
+
+class StrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", use_enum_values=False)
 
 
 class Sex(str, Enum):
@@ -15,10 +19,17 @@ class Sex(str, Enum):
     female = "female"
 
 
-class ContributionType(str, Enum):
-    compulsory_state = "compulsory_state"
-    compulsory_employer = "compulsory_employer"
-    voluntary = "voluntary"
+class RetirementCase(str, Enum):
+    normal = "normal"
+    hazardous_or_special_region = "hazardous_or_special_region"
+    underground_coal = "underground_coal"
+    reduced_capacity = "reduced_capacity"
+
+
+class RetirementPolicy(str, Enum):
+    none = "none"
+    decree_154_streamlining = "decree_154_streamlining"
+    other_special_policy = "other_special_policy"
 
 
 class ParticipationStatus(str, Enum):
@@ -31,55 +42,15 @@ class DurationOnlyReason(str, Enum):
     pre1995_no_salary_or_living_allowance = "pre1995_no_salary_or_living_allowance"
 
 
-class RetirementCase(str, Enum):
-    normal = "normal"
-    hazardous_or_special_region = "hazardous_or_special_region"
-    underground_coal = "underground_coal"
-    reduced_capacity = "reduced_capacity"
-    policy_no_reduction = "policy_no_reduction"
-    occupational_hiv = "occupational_hiv"
-    armed_forces = "armed_forces"
-
-
-class HazardousMatchStatus(str, Enum):
-    not_evaluated = "not_evaluated"
-    candidate = "candidate"
-    confirmed = "confirmed"
-    rejected = "rejected"
-
-
-class HazardousClass(str, Enum):
-    IV = "IV"
-    V = "V"
-    VI = "VI"
-
-
-class EarlyRetirementPolicyCode(str, Enum):
-    nd154_2025_streamlining = "nd154_2025_streamlining"
-    nd178_2024_nd67_2025_restructuring = "nd178_2024_nd67_2025_restructuring"
-    nd177_2024_non_reappointment = "nd177_2024_non_reappointment"
-    other_no_reduction = "other_no_reduction"
-
-
-class RetirementAgeReference(str, Enum):
-    normal_schedule = "normal_schedule"
-    hazardous_schedule = "hazardous_schedule"
-
-
-class SourceDocumentType(str, Enum):
-    direct_input = "direct_input"
-    mau_07_sbh = "mau_07_sbh"
-    vssid = "vssid"
-    other = "other"
+class ContributionType(str, Enum):
+    compulsory_state = "compulsory_state"
+    compulsory_employer = "compulsory_employer"
+    voluntary = "voluntary"
 
 
 class BasisInputType(str, Enum):
-    total_vnd = "total_vnd"
-    converted_state_vnd = "converted_state_vnd"
-    component_sum_vnd = "component_sum_vnd"
     mau_07_sbh_components = "mau_07_sbh_components"
-    salary_coefficient = "salary_coefficient"
-    unknown = "unknown"
+    monthly_basis_vnd = "monthly_basis_vnd"
 
 
 class SbhComponentUnit(str, Enum):
@@ -87,474 +58,119 @@ class SbhComponentUnit(str, Enum):
     vnd = "vnd"
 
 
-class ConfirmationStatus(str, Enum):
-    confirmed = "confirmed"
-    unconfirmed = "unconfirmed"
-    unclear = "unclear"
+class AverageInclusion(str, Enum):
+    included = "included"
+    excluded = "excluded"
 
 
-class PensionRegime(str, Enum):
-    compulsory = "compulsory"
-    voluntary = "voluntary"
-    mixed_compulsory_policy = "mixed_compulsory_policy"
-    mixed_voluntary_policy = "mixed_voluntary_policy"
-    undetermined = "undetermined"
+class AverageExclusionReason(str, Enum):
+    pre1995_policy = "pre1995_policy"
 
 
-class EarlyRetirementPolicyEvidence(BaseModel):
-    model_config = ConfigDict(title="Căn cứ nghỉ hưu trước tuổi không giảm tỷ lệ")
-    policy_code: EarlyRetirementPolicyCode
-    legal_document_number: str = Field(
-        title="Số nghị định/quyết định áp dụng",
-        description="Ví dụ 154/2025/NĐ-CP hoặc quyết định nghỉ hưu của cấp có thẩm quyền.",
-    )
-    age_reference: RetirementAgeReference = RetirementAgeReference.normal_schedule
-    competent_authority_decision_number: str | None = None
-    competent_authority_decision_date: date | None = None
-    approved_by_competent_authority: bool = False
-    no_reduction_confirmed: bool = False
-    confirmation_status: ConfirmationStatus = ConfirmationStatus.unconfirmed
-    custom_maximum_early_months: Annotated[int | None, Field(ge=1, le=240)] = None
-    note: str | None = None
-
-class Person(BaseModel):
-    model_config = ConfigDict(title="Thông tin cá nhân")
-    date_of_birth: date = Field(title="Ngày sinh", examples=["1969-09-01"])
-    sex: Sex = Field(title="Giới tính", description="male = Nam; female = Nữ")
+class BenefitCalculationScope(str, Enum):
+    pension_only = "pension_only"
+    pension_and_one_time_allowance = "pension_and_one_time_allowance"
 
 
-class BasisComponents(BaseModel):
-    model_config = ConfigDict(title="Các thành phần làm căn cứ đóng")
-    main_salary_vnd: Annotated[Decimal | None, Field(ge=0)] = None
-    salary_allowance_vnd: Annotated[Decimal | None, Field(ge=0)] = None
-    other_supplement_vnd: Annotated[Decimal | None, Field(ge=0)] = None
+class Person(StrictModel):
+    date_of_birth: date
+    sex: Sex
+
+
+class SBHComponents(StrictModel):
+    unit: SbhComponentUnit
+    base_value: Annotated[Decimal, Field(ge=0)]
+    position_allowance: Annotated[Decimal, Field(ge=0)] = Decimal("0")
+    seniority_beyond_frame_allowance: Annotated[Decimal, Field(ge=0)] = Decimal("0")
+    professional_seniority_allowance: Annotated[Decimal, Field(ge=0)] = Decimal("0")
+    regional_allowance: Annotated[Decimal, Field(ge=0)] = Decimal("0")
+    other_allowance: Annotated[Decimal, Field(ge=0)] = Decimal("0")
+    reelection_allowance: Annotated[Decimal, Field(ge=0)] = Decimal("0")
 
     def total(self) -> Decimal:
         return sum(
-            (v or Decimal("0"))
-            for v in (
-                self.main_salary_vnd,
-                self.salary_allowance_vnd,
-                self.other_supplement_vnd,
-            )
+            (
+                self.base_value,
+                self.position_allowance,
+                self.seniority_beyond_frame_allowance,
+                self.professional_seniority_allowance,
+                self.regional_allowance,
+                self.other_allowance,
+                self.reelection_allowance,
+            ),
+            Decimal("0"),
         )
 
 
-class Mau07SbhBasisComponents(BaseModel):
-    model_config = ConfigDict(title="Các thành phần Mẫu 07/SBH")
-    unit: SbhComponentUnit = Field(
-        title="Đơn vị thành phần",
-        description="coefficient = hệ số; vnd = đồng/tháng. Tất cả thành phần phải cùng đơn vị.",
-    )
-    base_value: Annotated[Decimal, Field(ge=0)] = Field(
-        title="Mức đóng gốc",
-        description="Giá trị tại cột Mức đóng của Mẫu 07/SBH.",
-    )
-    position_allowance: Annotated[Decimal, Field(ge=0)] = Field(default=Decimal("0"), title="Phụ cấp chức vụ")
-    seniority_beyond_frame_allowance: Annotated[Decimal, Field(ge=0)] = Field(default=Decimal("0"), title="Phụ cấp thâm niên vượt khung")
-    professional_seniority_allowance: Annotated[Decimal, Field(ge=0)] = Field(default=Decimal("0"), title="Phụ cấp thâm niên nghề")
-    regional_allowance: Annotated[Decimal, Field(ge=0)] = Field(default=Decimal("0"), title="Phụ cấp khu vực")
-    other_allowance: Annotated[Decimal, Field(ge=0)] = Field(default=Decimal("0"), title="Phụ cấp khác")
-    reelection_allowance: Annotated[Decimal, Field(ge=0)] = Field(default=Decimal("0"), title="Phụ cấp tái cử")
-    base_salary_vnd_override: Annotated[Decimal | None, Field(gt=0)] = Field(
-        default=None,
-        title="Mức lương cơ sở dùng quy đổi",
-        description=(
-            "Tùy chọn. Dùng khi thành phần là hệ số và cần chỉ định lương cơ sở cho toàn bộ giai đoạn. "
-            "Nếu bỏ trống với lương Nhà nước, API dùng lương cơ sở theo từng tháng; trước năm 2016 dùng mức tại tháng hưởng."
-        ),
-    )
-
-    def allowance_total(self) -> Decimal:
-        return sum((
-            self.position_allowance,
-            self.seniority_beyond_frame_allowance,
-            self.professional_seniority_allowance,
-            self.regional_allowance,
-            self.other_allowance,
-            self.reelection_allowance,
-        ), Decimal("0"))
-
-    def total_component_value(self) -> Decimal:
-        return self.base_value + self.allowance_total()
+class Contribution(StrictModel):
+    from_month: str = Field(pattern=YEAR_MONTH_PATTERN)
+    to_month: str = Field(pattern=YEAR_MONTH_PATTERN)
+    participation_status: ParticipationStatus
+    duration_only_reason: DurationOnlyReason | None = None
+    contribution_type: ContributionType | None = None
+    basis_input_type: BasisInputType | None = None
+    monthly_basis_vnd: Annotated[Decimal | None, Field(ge=0)] = None
+    sbh_components: SBHComponents | None = None
+    average_inclusion: AverageInclusion | None = None
+    average_exclusion_reason: AverageExclusionReason | None = None
+    after_retirement_age_period: bool = False
 
 
-class ContributionPeriod(BaseModel):
-    model_config = ConfigDict(title="Giai đoạn trong quá trình BHXH")
-    from_month: str = Field(pattern=YEAR_MONTH_PATTERN, title="Từ tháng")
-    to_month: str = Field(pattern=YEAR_MONTH_PATTERN, title="Đến tháng")
-    participation_status: ParticipationStatus = Field(
-        default=ParticipationStatus.contributed,
-        title="Trạng thái tham gia",
-        description=(
-            "contributed = có đóng và dùng tính thời gian, mức bình quân; "
-            "credited_duration_only = chỉ cộng thời gian, không dùng mức lương; "
-            "not_participating = không tham gia, loại khỏi toàn bộ phép tính."
-        ),
-    )
-    duration_only_reason: DurationOnlyReason | None = Field(
-        default=None,
-        title="Căn cứ chỉ cộng thời gian",
-        description=(
-            "Bắt buộc khi participation_status = credited_duration_only. "
-            "Hiện API chỉ hỗ trợ thời gian trước 01/01/1995 được công nhận nhưng "
-            "không hưởng tiền lương hoặc sinh hoạt phí."
-        ),
-    )
-    monthly_basis_vnd: Annotated[Decimal | None, Field(gt=0)] = Field(
-        default=None,
-        title="Tổng mức làm căn cứ đóng (đồng/tháng)",
-        description="Chỉ bắt buộc với trạng thái contributed; phải là VND, không phải hệ số thô.",
-    )
-    contribution_type: ContributionType | None = Field(
-        default=None,
-        title="Loại quá trình đóng",
-        description="Không bắt buộc khi participation_status = not_participating.",
-    )
-    basis_input_type: BasisInputType = Field(
-        default=BasisInputType.total_vnd,
-        title="Kiểu dữ liệu mức đóng",
-    )
-    basis_components: BasisComponents | None = None
-    sbh_components: Mau07SbhBasisComponents | None = Field(
-        default=None,
-        title="Các thành phần cột Mẫu 07/SBH",
-        description=(
-            "Tổng hệ số/mức đóng = Mức đóng + Chức vụ + TN VK + TN Nghề + "
-            "Khu vực + Khác + Tái cử. Chỉ dùng khi basis_input_type=mau_07_sbh_components."
-        ),
-    )
-    source_value: Decimal | None = Field(
-        default=None,
-        title="Giá trị đọc từ hồ sơ",
-        description="Dùng kiểm toán Mẫu 07/SBH; không tự dùng để tính nếu chưa chuẩn hóa.",
-    )
-    source_unit: str | None = None
-    source_row_id: str | None = None
-    source_text: str | None = None
-    confirmation_status: ConfirmationStatus = ConfirmationStatus.confirmed
-    coefficient_override: Annotated[Decimal | None, Field(gt=0)] = None
-    note: str | None = None
-
-    hazardous_match_status: HazardousMatchStatus = HazardousMatchStatus.not_evaluated
-    hazardous_catalog_code: str | None = None
-    hazardous_catalog_title: str | None = None
-    hazardous_class: HazardousClass | None = None
-    hazardous_legal_document: str | None = None
-    hazardous_user_confirmed: bool = False
-    qualifying_hazardous: bool = False
-    qualifying_especially_hazardous: bool = False
-    qualifying_underground_coal: bool = False
-
-    @model_validator(mode="after")
-    def validate_period(self) -> "ContributionPeriod":
-        if self.from_month > self.to_month:
-            raise ValueError("Từ tháng phải nhỏ hơn hoặc bằng đến tháng.")
-
-        any_hazardous_flag = (
-            self.qualifying_hazardous
-            or self.qualifying_especially_hazardous
-            or self.qualifying_underground_coal
-        )
-        if any_hazardous_flag:
-            if self.hazardous_match_status != HazardousMatchStatus.confirmed:
-                raise ValueError(
-                    "Giai đoạn nghề nặng nhọc chỉ được đánh dấu đủ điều kiện khi hazardous_match_status=confirmed."
-                )
-            if not self.hazardous_user_confirmed:
-                raise ValueError(
-                    "Giai đoạn nghề nặng nhọc phải được người dùng xác nhận trước khi tính."
-                )
-            if not self.hazardous_catalog_code or not self.hazardous_catalog_title:
-                raise ValueError(
-                    "Giai đoạn nghề nặng nhọc đã xác nhận phải có mã và tên nghề trong danh mục."
-                )
-
-        if self.participation_status == ParticipationStatus.not_participating:
-            return self
-
-        if self.contribution_type is None:
-            raise ValueError(
-                "Giai đoạn có tính thời gian BHXH phải có contribution_type."
-            )
-
-        if self.participation_status == ParticipationStatus.credited_duration_only:
-            if self.to_month >= "1995-01":
-                raise ValueError(
-                    "credited_duration_only chỉ dùng cho thời gian được công nhận trước 01/01/1995; "
-                    "hãy tách riêng giai đoạn từ 1995 trở đi."
-                )
-            if (
-                self.duration_only_reason
-                != DurationOnlyReason.pre1995_no_salary_or_living_allowance
-            ):
-                raise ValueError(
-                    "credited_duration_only phải có duration_only_reason="
-                    "pre1995_no_salary_or_living_allowance."
-                )
-            return self
-
-        if self.basis_input_type == BasisInputType.component_sum_vnd:
-            if self.monthly_basis_vnd is None and (
-                self.basis_components is None or self.basis_components.total() <= 0
-            ):
-                raise ValueError(
-                    "Dữ liệu component_sum_vnd phải có monthly_basis_vnd hoặc các thành phần tiền lương."
-                )
-
-        if self.basis_input_type == BasisInputType.mau_07_sbh_components:
-            if self.sbh_components is None:
-                raise ValueError(
-                    "mau_07_sbh_components phải có sbh_components."
-                )
-            if self.monthly_basis_vnd is not None or self.basis_components is not None:
-                raise ValueError(
-                    "Không gửi monthly_basis_vnd/basis_components cùng sbh_components để tránh cộng hai lần."
-                )
-            if self.sbh_components.total_component_value() <= 0:
-                raise ValueError("Tổng Mức đóng và các phụ cấp phải lớn hơn 0.")
-            if (
-                self.sbh_components.unit == SbhComponentUnit.coefficient
-                and self.contribution_type != ContributionType.compulsory_state
-                and self.sbh_components.base_salary_vnd_override is None
-            ):
-                raise ValueError(
-                    "Thành phần hệ số ngoài chế độ lương Nhà nước phải có base_salary_vnd_override."
-                )
-        return self
-
-
-class AdjustmentInput(BaseModel):
-    model_config = ConfigDict(title="Bộ hệ số điều chỉnh")
-    coefficient_year: int = Field(default=2026, ge=2025, le=2100)
-    salary_coefficients: dict[int, Annotated[Decimal, Field(gt=0)]] | None = None
-    voluntary_income_coefficients: dict[int, Annotated[Decimal, Field(gt=0)]] | None = None
-
-
-class PensionRequest(BaseModel):
-    model_config = ConfigDict(
-        title="Yêu cầu tính lương hưu",
-        json_schema_extra={
-            "examples": [{
-                "person": {"date_of_birth": "1969-09-01", "sex": "female"},
-                "pension_start_month": "2026-10",
-                "retirement_case": "normal",
-                "source_document_type": "mau_07_sbh",
-                "history_confirmed": True,
-                "gaps_confirmed_as_non_contribution": True,
-                "contributions": [{
-                    "from_month": "1996-10",
-                    "to_month": "2026-09",
-                    "participation_status": "contributed",
-                    "monthly_basis_vnd": 10800000,
-                    "contribution_type": "compulsory_employer",
-                    "basis_input_type": "total_vnd",
-                    "confirmation_status": "confirmed"
-                }],
-                "adjustment": {"coefficient_year": 2026}
-            }]
-        },
-    )
-
+class PensionCalculationRequest(StrictModel):
     person: Person
     pension_start_month: str = Field(pattern=YEAR_MONTH_PATTERN)
-    retirement_case: RetirementCase = RetirementCase.normal
-    contributions: list[ContributionPeriod] = Field(min_length=1)
-
-    source_document_type: SourceDocumentType = SourceDocumentType.direct_input
-    history_confirmed: bool = True
-    gaps_confirmed_as_non_contribution: bool = False
-
+    retirement_case: RetirementCase
+    retirement_policy: RetirementPolicy = RetirementPolicy.none
     impairment_percent: Annotated[Decimal | None, Field(ge=0, le=100)] = None
-    impairment_assessment_month: str | None = Field(default=None, pattern=YEAR_MONTH_PATTERN)
-    eligibility_achieved_month: str | None = Field(default=None, pattern=YEAR_MONTH_PATTERN)
-
-    hazardous_or_special_region_months: int = Field(default=0, ge=0)
-    especially_hazardous_months: int = Field(default=0, ge=0)
-    underground_coal_months: int = Field(default=0, ge=0)
-    early_retirement_policy: EarlyRetirementPolicyEvidence | None = None
-
-    state_salary_values_are_converted: bool = False
-    transitional_minimum_floor_eligible: bool = False
-    reference_level_vnd: Annotated[Decimal | None, Field(gt=0)] = None
-    adjustment: AdjustmentInput = Field(default_factory=AdjustmentInput)
+    contributions: list[Contribution] = Field(min_length=1)
+    retirement_age_eligible_month: str | None = Field(
+        default=None, pattern=YEAR_MONTH_PATTERN
+    )
+    benefit_calculation_scope: BenefitCalculationScope = (
+        BenefitCalculationScope.pension_and_one_time_allowance
+    )
 
 
-class HistoryIssue(BaseModel):
-    code: str
-    severity: str
-    message_vi: str
-    source_row_id: str | None = None
-    from_month: str | None = None
-    to_month: str | None = None
+class NormalizedSummary(StrictModel):
+    total_contribution_months: int
+    excluded_bhtn_months: int
+    contribution_count: int
 
 
-class GapPeriod(BaseModel):
-    from_month: str
-    to_month: str
-    months: int
+class ValidationResponse(StrictModel):
+    validation: bool
+    normalized_summary: NormalizedSummary | None = None
+    warnings: list[str] = Field(default_factory=list)
 
 
-class HistoryValidationResult(BaseModel):
-    valid_for_calculation: bool
-    total_unique_months: int = Field(description="Tổng tháng được tính là thời gian tham gia BHXH.")
-    average_basis_months: int = Field(default=0, description="Số tháng có mức đóng được dùng tính bình quân.")
-    credited_duration_only_months: int = Field(default=0, description="Số tháng chỉ cộng thời gian, không dùng tính bình quân.")
-    excluded_non_participation_months: int = Field(default=0, description="Số tháng ghi rõ không tham gia BHXH và đã loại khỏi phép tính.")
-    gaps: list[GapPeriod] = Field(default_factory=list)
-    overlaps: list[str] = Field(default_factory=list)
-    issues: list[HistoryIssue] = Field(default_factory=list)
-
-
-class EligibilityResult(BaseModel):
+class OneTimeRetirementAllowance(StrictModel):
     eligible: bool
-    case: RetirementCase
-    regime: PensionRegime = PensionRegime.undetermined
-    reasons: list[str] = Field(default_factory=list)
-    missing_fields: list[str] = Field(default_factory=list)
-    required_total_months: int | None = None
-    required_compulsory_months: int | None = None
-    months_short: int = 0
-    can_pay_missing_months_once: bool = False
+    threshold_months: int
+    total_excess_months: int
+    excess_before_retirement_age_months: int
+    excess_after_retirement_age_months: int
+    standard_allowance_amount: float
+    post_retirement_allowance_amount: float
+    total_allowance_amount: float
+    average_basis: float
+    warnings: list[str] = Field(default_factory=list)
 
 
-class ContributionSummary(BaseModel):
+class PensionCalculationResponse(StrictModel):
     total_months: int
-    compulsory_months: int
-    voluntary_months: int
-    average_basis_months: int = 0
-    credited_duration_only_months: int = 0
-    excluded_non_participation_months: int = 0
-    exact_duration: str
-    rounded_years_for_rate: Decimal
-
-
-class YearlyAdjustmentBreakdown(BaseModel):
-    year: int
-    contribution_type: ContributionType
-    months: int
-    original_total_vnd: Decimal
-    adjusted_total_vnd: Decimal
-    coefficient: Decimal | None
-
-
-class BasisComponentAudit(BaseModel):
-    source_row_id: str | None = None
-    from_month: str
-    to_month: str
-    component_unit: SbhComponentUnit
-    base_value: Decimal
-    position_allowance: Decimal
-    seniority_beyond_frame_allowance: Decimal
-    professional_seniority_allowance: Decimal
-    regional_allowance: Decimal
-    other_allowance: Decimal
-    reelection_allowance: Decimal
-    allowance_total: Decimal
-    total_component_value: Decimal
-    base_salary_values_used_vnd: list[Decimal] = Field(default_factory=list)
-    monthly_basis_min_vnd: Decimal | None = None
-    monthly_basis_max_vnd: Decimal | None = None
-    formula_vi: str
-
-
-class AverageBasisResult(BaseModel):
-    amount_vnd: Decimal | None = Field(description="Trường tương thích ngược; bằng average_monthly_basis_vnd.")
-    average_monthly_basis_vnd: Decimal | None = Field(description="Mức bình quân tiền lương/thu nhập làm căn cứ đóng BHXH trước khi nhân tỷ lệ hưởng.")
-    basis_months_used: int = Field(default=0, description="Số tháng dữ liệu tiền lương/thu nhập trực tiếp dùng trong phép bình quân.")
-    method: str | None
-    coefficient_year: int
-    state_average_months_used: int = 0
-    yearly_breakdown: list[YearlyAdjustmentBreakdown] = Field(default_factory=list)
-
-
-class PensionRateResult(BaseModel):
-    rounded_years: Decimal | None = None
-    base_rate_percent: Decimal | None
-    early_retirement_months: int = 0
-    early_retirement_reduction_percent: Decimal
-    final_rate_percent: Decimal | None
-    reduction_reference_age: str | None = None
-
-
-class LegalReference(BaseModel):
-    document: str
-    provisions: str
-    purpose: str
-
-
-class HazardousMatchedPeriod(BaseModel):
-    source_row_id: str | None = None
-    from_month: str
-    to_month: str
-    months: int
-    catalog_code: str
-    catalog_title: str
-    hazardous_class: HazardousClass | None = None
-    legal_document: str | None = None
-
-
-class HazardousSummary(BaseModel):
-    confirmed_hazardous_months: int = 0
-    confirmed_especially_hazardous_months: int = 0
-    confirmed_underground_coal_months: int = 0
-    exact_hazardous_duration: str = "0 năm 0 tháng"
-    confirmed_periods: list[HazardousMatchedPeriod] = Field(default_factory=list)
-
-
-class EarlyRetirementPolicyResult(BaseModel):
-    policy_code: EarlyRetirementPolicyCode | None = None
-    legal_document_number: str | None = None
-    age_reference: RetirementAgeReference | None = None
-    reference_threshold_date: date | None = None
-    early_retirement_months: int = 0
-    maximum_early_months: int | None = None
-    no_reduction_applied: bool = False
-    approved_by_competent_authority: bool = False
-    decision_number: str | None = None
-    reasons: list[str] = Field(default_factory=list)
+    average_salary: float
+    replacement_rate: float
+    rate_before_early_reduction: float
+    contribution_month_remainder_rate: float
+    early_retirement_months: int
+    early_retirement_reduction: float
+    rate_after_reduction: float
+    estimated_pension: float
     warnings: list[str] = Field(default_factory=list)
+    one_time_retirement_allowance: OneTimeRetirementAllowance | None = None
 
 
-class PensionResponse(BaseModel):
-    calculation_id: str
-    status: str
-    error_code: str | None = None
-    legal_rule_version: str
-    requested_pension_start_month: str
-    retirement_end_date: date
-    normal_retirement_age_in_retirement_year: str
-    normal_retirement_threshold_date: date
-    earliest_normal_pension_start_month: str
-
-    history_validation: HistoryValidationResult
-    contribution_summary: ContributionSummary
-    hazardous_summary: HazardousSummary = Field(default_factory=HazardousSummary)
-    early_retirement_policy_result: EarlyRetirementPolicyResult | None = None
-    eligibility: EligibilityResult
-    average_basis: AverageBasisResult
-    basis_component_audit: list[BasisComponentAudit] = Field(default_factory=list)
-    pension_rate: PensionRateResult
-
-    estimated_monthly_pension_vnd: Decimal | None
-    pension_calculation_formula: str | None = None
-    one_time_retirement_allowance_vnd: Decimal | None
-    minimum_floor_applied: bool = False
-
-    assumptions: list[str] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
-    audit_steps: list[str] = Field(default_factory=list)
-    legal_references: list[LegalReference] = Field(default_factory=list)
-
-
-class CapabilitiesResponse(BaseModel):
-    service: str
-    version: str
-    legal_rule_version: str
-    built_in_coefficient_years: list[int]
-    supported_retirement_cases: list[RetirementCase]
-    manual_review_cases: list[RetirementCase]
-    supported_source_documents: list[SourceDocumentType]
-    supported_early_retirement_policies: list[EarlyRetirementPolicyCode] = Field(default_factory=list)
-    armed_forces_supported: bool = False
-    notes: list[str]
+class ErrorResponse(StrictModel):
+    error_code: str
+    detail: str
+    fields: list[str] = Field(default_factory=list)

@@ -1,79 +1,89 @@
 from __future__ import annotations
 
 import calendar
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
-from uuid import uuid4
+from typing import Iterable
 
 from dateutil.relativedelta import relativedelta
 
 from .models import (
-    AverageBasisResult,
-    BasisComponentAudit,
+    AverageExclusionReason,
+    AverageInclusion,
     BasisInputType,
-    CapabilitiesResponse,
-    ConfirmationStatus,
-    ContributionSummary,
+    BenefitCalculationScope,
+    Contribution,
     ContributionType,
-    GapPeriod,
-    HistoryIssue,
-    HistoryValidationResult,
-    LegalReference,
-    PensionRateResult,
-    PensionRegime,
-    PensionRequest,
-    PensionResponse,
+    NormalizedSummary,
+    OneTimeRetirementAllowance,
     ParticipationStatus,
+    PensionCalculationRequest,
+    PensionCalculationResponse,
     RetirementCase,
-    SourceDocumentType,
+    RetirementPolicy,
     SbhComponentUnit,
-    YearlyAdjustmentBreakdown,
-    EligibilityResult,
-    EarlyRetirementPolicyCode,
-    EarlyRetirementPolicyResult,
-    HazardousMatchStatus,
-    HazardousMatchedPeriod,
-    HazardousSummary,
-    RetirementAgeReference,
+    Sex,
+    ValidationResponse,
 )
 from .rules import (
-    COEFFICIENTS_2026,
-    VOLUNTARY_COEFFICIENTS_2026,
-    LEGAL_REFERENCES,
     LEGAL_RULE_VERSION,
-    age_after_offset,
+    SUPPORTED_BENEFIT_YEAR,
+    adjustment_tables,
     base_salary_for_month,
     coefficient_for_year,
-    earliest_threshold_for_schedule,
-    state_average_years,
-    threshold_date_for_retirement_year,
+    earliest_threshold_date,
+    state_average_months,
 )
 
 MONEY = Decimal("1")
+PRE1995_CUTOFF = date(1995, 1, 1)
+DISCLAIMER = (
+    "Đây là kết quả ước tính, không thay thế quyết định giải quyết chế độ "
+    "của cơ quan BHXH."
+)
+
+
+class BusinessError(Exception):
+    def __init__(self, error_code: str, detail: str, fields: list[str] | None = None):
+        super().__init__(detail)
+        self.error_code = error_code
+        self.detail = detail
+        self.fields = fields or []
+
+
+@dataclass(frozen=True)
+class Issue:
+    code: str
+    message: str
+    fields: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ValidationDiagnostics:
+    response: ValidationResponse
+    issues: tuple[Issue, ...]
 
 
 @dataclass(frozen=True)
 class MonthlyRecord:
     month: date
-    basis: Decimal | None
     contribution_type: ContributionType
     participation_status: ParticipationStatus
-    basis_input_type: BasisInputType
-    coefficient_override: Decimal | None
-    source_row_id: str | None
-    qualifying_hazardous: bool
-    qualifying_especially_hazardous: bool
-    qualifying_underground_coal: bool
-    component_unit: SbhComponentUnit | None = None
-    total_component_value: Decimal | None = None
-    base_salary_used_vnd: Decimal | None = None
+    basis_input_type: BasisInputType | None
+    basis_vnd: Decimal | None
+    component_unit: SbhComponentUnit | None
+    average_included: bool
+    after_retirement_age_period: bool
 
-    @property
-    def included_in_average(self) -> bool:
-        return self.participation_status == ParticipationStatus.contributed
 
+@dataclass(frozen=True)
+class Eligibility:
+    retirement_threshold: date
+    normal_threshold: date
+    early_retirement_months: int
+    early_retirement_reduction: Decimal
+    warnings: tuple[str, ...] = ()
 
 
 def parse_year_month(value: str) -> date:
@@ -85,1309 +95,1043 @@ def format_year_month(value: date) -> str:
     return f"{value.year:04d}-{value.month:02d}"
 
 
-def month_end(value: date) -> date:
-    return date(value.year, value.month, calendar.monthrange(value.year, value.month)[1])
-
-
 def next_month(value: date) -> date:
     return value + relativedelta(months=1)
 
 
-def previous_month_end(first_of_month: date) -> date:
-    return first_of_month - relativedelta(days=1)
+def previous_month_end(value: date) -> date:
+    previous = value - relativedelta(months=1)
+    return date(previous.year, previous.month, calendar.monthrange(previous.year, previous.month)[1])
 
 
-def months_inclusive(start: date, end: date) -> int:
-    return (end.year - start.year) * 12 + end.month - start.month + 1
+def month_range(start: date, end: date) -> Iterable[date]:
+    current = start
+    while current <= end:
+        yield current
+        current = next_month(current)
 
 
-def exact_duration(total_months: int) -> str:
-    years, months = divmod(total_months, 12)
-    return f"{years} năm {months} tháng"
+def months_difference(later: date, earlier: date) -> int:
+    return max(0, (later.year - earlier.year) * 12 + later.month - earlier.month)
 
 
-def rounded_years_for_rate(total_months: int) -> Decimal:
-    years, rem = divmod(total_months, 12)
-    fraction = Decimal("0") if rem == 0 else Decimal("0.5") if rem <= 6 else Decimal("1")
-    return Decimal(years) + fraction
+def _append(issues: list[Issue], code: str, message: str, *fields: str) -> None:
+    issues.append(Issue(code=code, message=message, fields=tuple(fields)))
 
 
-@dataclass(frozen=True)
-class ResolvedBasis:
-    amount_vnd: Decimal | None
-    component_unit: SbhComponentUnit | None = None
-    total_component_value: Decimal | None = None
-    base_salary_used_vnd: Decimal | None = None
+def validate_request(request: PensionCalculationRequest) -> ValidationDiagnostics:
+    issues: list[Issue] = []
+    warnings: list[str] = []
+    pension_start = parse_year_month(request.pension_start_month)
+
+    if pension_start.year != SUPPORTED_BENEFIT_YEAR:
+        _append(
+            issues,
+            "COEFFICIENT_YEAR_UNAVAILABLE",
+            (
+                f"Gói dữ liệu tích hợp chỉ có hệ số điều chỉnh cho năm hưởng "
+                f"{SUPPORTED_BENEFIT_YEAR}; không được dùng cho năm "
+                f"{pension_start.year}."
+            ),
+            "pension_start_month",
+        )
+
+    if (
+        request.retirement_policy != RetirementPolicy.none
+        and request.retirement_case != RetirementCase.normal
+    ):
+        _append(
+            issues,
+            "RETIREMENT_POLICY_CASE_CONFLICT",
+            "retirement_policy chỉ được dùng cùng retirement_case=normal trong hợp đồng V67.4.",
+            "retirement_policy",
+            "retirement_case",
+        )
+
+    if request.retirement_policy == RetirementPolicy.other_special_policy:
+        _append(
+            issues,
+            "OTHER_SPECIAL_POLICY_NOT_AUTOMATED",
+            (
+                "other_special_policy chưa có trường căn cứ/quyết định trong schema V67.4, "
+                "nên backend không thể tự quyết định điều kiện hoặc mức giảm."
+            ),
+            "retirement_policy",
+        )
+
+    if request.retirement_case == RetirementCase.reduced_capacity:
+        if request.impairment_percent is None:
+            _append(
+                issues,
+                "IMPAIRMENT_PERCENT_REQUIRED",
+                "Trường hợp reduced_capacity phải có impairment_percent.",
+                "impairment_percent",
+            )
+        elif request.impairment_percent < Decimal("61"):
+            _append(
+                issues,
+                "IMPAIRMENT_PERCENT_TOO_LOW",
+                "Tỷ lệ suy giảm khả năng lao động phải từ 61% trong phạm vi tự động hóa này.",
+                "impairment_percent",
+            )
+    elif request.impairment_percent is not None:
+        warnings.append(
+            "impairment_percent được cung cấp nhưng không dùng vì retirement_case không phải reduced_capacity."
+        )
+
+    month_owner: dict[date, int] = {}
+    counted_months: set[date] = set()
+    excluded_months: set[date] = set()
+    covered_months: set[date] = set()
+    pre1995_excluded_months = 0
+    eligible_month = (
+        parse_year_month(request.retirement_age_eligible_month)
+        if request.retirement_age_eligible_month
+        else None
+    )
+    pending_age_issues: list[Issue] = []
+
+    for index, period in enumerate(request.contributions):
+        prefix = f"contributions[{index}]"
+        start = parse_year_month(period.from_month)
+        end = parse_year_month(period.to_month)
+
+        if start > end:
+            _append(
+                issues,
+                "REVERSED_PERIOD",
+                f"Dòng {index + 1}: from_month phải nhỏ hơn hoặc bằng to_month.",
+                f"{prefix}.from_month",
+                f"{prefix}.to_month",
+            )
+            continue
+
+        if start < PRE1995_CUTOFF <= end:
+            _append(
+                issues,
+                "PRE1995_PERIOD_MUST_BE_SPLIT",
+                (
+                    f"Dòng {index + 1} đi qua mốc 01/1995; phải tách thành giai đoạn "
+                    "trước 1995 và từ 1995 trở đi."
+                ),
+                f"{prefix}.from_month",
+                f"{prefix}.to_month",
+            )
+
+        if end >= pension_start:
+            _append(
+                issues,
+                "CONTRIBUTION_AFTER_PENSION_START",
+                (
+                    f"Dòng {index + 1} có tháng từ thời điểm bắt đầu hưởng lương hưu "
+                    "trở đi."
+                ),
+                f"{prefix}.to_month",
+                "pension_start_month",
+            )
+
+        is_pre1995 = end < PRE1995_CUTOFF
+        has_monthly = period.monthly_basis_vnd is not None
+        has_components = period.sbh_components is not None
+
+        if period.participation_status == ParticipationStatus.not_participating:
+            if has_monthly or has_components or period.basis_input_type is not None:
+                warnings.append(
+                    f"Dòng {index + 1} là not_participating; mọi mức đóng/thành phần được bỏ qua."
+                )
+        elif period.participation_status == ParticipationStatus.credited_duration_only:
+            if not is_pre1995:
+                _append(
+                    issues,
+                    "CREDITED_DURATION_ONLY_AFTER_1994",
+                    "credited_duration_only chỉ hợp lệ cho thời gian kết thúc trước 01/1995.",
+                    f"{prefix}.participation_status",
+                    f"{prefix}.to_month",
+                )
+            if (
+                period.duration_only_reason is None
+                or period.duration_only_reason.value
+                != "pre1995_no_salary_or_living_allowance"
+            ):
+                _append(
+                    issues,
+                    "DURATION_ONLY_REASON_REQUIRED",
+                    (
+                        "credited_duration_only phải có duration_only_reason="
+                        "pre1995_no_salary_or_living_allowance."
+                    ),
+                    f"{prefix}.duration_only_reason",
+                )
+            if period.contribution_type is None:
+                _append(
+                    issues,
+                    "CONTRIBUTION_TYPE_REQUIRED",
+                    "Giai đoạn được cộng thời gian phải có contribution_type.",
+                    f"{prefix}.contribution_type",
+                )
+            if has_monthly or has_components or period.basis_input_type is not None:
+                _append(
+                    issues,
+                    "DURATION_ONLY_BASIS_NOT_ALLOWED",
+                    "credited_duration_only không được mang mức đóng vào bình quân.",
+                    f"{prefix}.monthly_basis_vnd",
+                    f"{prefix}.sbh_components",
+                    f"{prefix}.basis_input_type",
+                )
+            if period.average_inclusion == AverageInclusion.included:
+                _append(
+                    issues,
+                    "DURATION_ONLY_AVERAGE_INCLUDED",
+                    "credited_duration_only không được đưa vào tính mức bình quân.",
+                    f"{prefix}.average_inclusion",
+                )
+        else:
+            if period.contribution_type is None:
+                _append(
+                    issues,
+                    "CONTRIBUTION_TYPE_REQUIRED",
+                    "Giai đoạn contributed phải có contribution_type.",
+                    f"{prefix}.contribution_type",
+                )
+            elif (
+                period.contribution_type == ContributionType.voluntary
+                and start < date(2008, 1, 1)
+            ):
+                _append(
+                    issues,
+                    "VOLUNTARY_PERIOD_BEFORE_2008",
+                    (
+                        "Giai đoạn BHXH tự nguyện trước 01/2008 không có hệ số "
+                        "thu nhập trong bộ dữ liệu 2026."
+                    ),
+                    f"{prefix}.contribution_type",
+                    f"{prefix}.from_month",
+                )
+
+            if is_pre1995:
+                if period.average_inclusion != AverageInclusion.excluded:
+                    _append(
+                        issues,
+                        "PRE1995_AVERAGE_EXCLUSION_REQUIRED",
+                        (
+                            "Giai đoạn contributed trước 01/1995 phải có "
+                            "average_inclusion=excluded."
+                        ),
+                        f"{prefix}.average_inclusion",
+                    )
+                if (
+                    period.average_exclusion_reason
+                    != AverageExclusionReason.pre1995_policy
+                ):
+                    _append(
+                        issues,
+                        "PRE1995_EXCLUSION_REASON_REQUIRED",
+                        (
+                            "Giai đoạn contributed trước 01/1995 phải có "
+                            "average_exclusion_reason=pre1995_policy."
+                        ),
+                        f"{prefix}.average_exclusion_reason",
+                    )
+                if has_monthly or has_components:
+                    warnings.append(
+                        f"Dòng {index + 1} trước 01/1995: mức đóng/phụ cấp được giữ để kiểm toán nhưng bị loại khỏi mức bình quân."
+                    )
+            else:
+                if period.average_inclusion == AverageInclusion.excluded:
+                    _append(
+                        issues,
+                        "AVERAGE_EXCLUSION_NOT_ALLOWED",
+                        "average_inclusion=excluded chỉ hỗ trợ cho chính sách trước 01/1995.",
+                        f"{prefix}.average_inclusion",
+                    )
+
+                if has_monthly == has_components:
+                    _append(
+                        issues,
+                        "EXACTLY_ONE_BASIS_REQUIRED",
+                        (
+                            "Mỗi giai đoạn contributed từ 01/1995 phải có đúng một "
+                            "phương thức mức đóng: monthly_basis_vnd hoặc sbh_components."
+                        ),
+                        f"{prefix}.monthly_basis_vnd",
+                        f"{prefix}.sbh_components",
+                    )
+                if period.basis_input_type is None:
+                    _append(
+                        issues,
+                        "BASIS_INPUT_TYPE_REQUIRED",
+                        "Giai đoạn contributed từ 01/1995 phải có basis_input_type.",
+                        f"{prefix}.basis_input_type",
+                    )
+                elif (
+                    period.basis_input_type == BasisInputType.monthly_basis_vnd
+                    and not has_monthly
+                ):
+                    _append(
+                        issues,
+                        "MONTHLY_BASIS_MISSING",
+                        "basis_input_type=monthly_basis_vnd phải có monthly_basis_vnd.",
+                        f"{prefix}.monthly_basis_vnd",
+                    )
+                elif (
+                    period.basis_input_type == BasisInputType.mau_07_sbh_components
+                    and not has_components
+                ):
+                    _append(
+                        issues,
+                        "SBH_COMPONENTS_MISSING",
+                        "basis_input_type=mau_07_sbh_components phải có sbh_components.",
+                        f"{prefix}.sbh_components",
+                    )
+
+                if has_monthly and (period.monthly_basis_vnd or Decimal("0")) <= 0:
+                    _append(
+                        issues,
+                        "MONTHLY_BASIS_MUST_BE_POSITIVE",
+                        "monthly_basis_vnd phải lớn hơn 0.",
+                        f"{prefix}.monthly_basis_vnd",
+                    )
+                if has_components:
+                    assert period.sbh_components is not None
+                    if period.sbh_components.total() <= 0:
+                        _append(
+                            issues,
+                            "SBH_COMPONENT_TOTAL_MUST_BE_POSITIVE",
+                            "Tổng Mức đóng và phụ cấp Mẫu 07/SBH phải lớn hơn 0.",
+                            f"{prefix}.sbh_components",
+                        )
+                    if (
+                        period.sbh_components.unit == SbhComponentUnit.coefficient
+                        and period.contribution_type
+                        != ContributionType.compulsory_state
+                    ):
+                        _append(
+                            issues,
+                            "COEFFICIENT_ONLY_FOR_STATE_SALARY",
+                            (
+                                "sbh_components.unit=coefficient chỉ được tự động quy đổi "
+                                "cho contribution_type=compulsory_state."
+                            ),
+                            f"{prefix}.sbh_components.unit",
+                            f"{prefix}.contribution_type",
+                        )
+
+        if eligible_month is None and period.after_retirement_age_period:
+            pending_age_issues.append(Issue(
+                code="RETIREMENT_AGE_MONTH_REQUIRED_FOR_MARKER",
+                message=(
+                    "Có after_retirement_age_period=true nhưng thiếu "
+                    "retirement_age_eligible_month."
+                ),
+                fields=(
+                    "retirement_age_eligible_month",
+                    f"{prefix}.after_retirement_age_period",
+                ),
+            ))
+
+        if eligible_month is not None and period.participation_status != ParticipationStatus.not_participating:
+            if start <= eligible_month < end:
+                pending_age_issues.append(Issue(
+                    code="RETIREMENT_AGE_PERIOD_MUST_BE_SPLIT",
+                    message=(
+                        f"Dòng {index + 1} đi qua tháng đủ tuổi nghỉ hưu; phải tách "
+                        "giai đoạn trước/sau để xác định trợ cấp một lần."
+                    ),
+                    fields=(
+                        f"{prefix}.from_month",
+                        f"{prefix}.to_month",
+                        "retirement_age_eligible_month",
+                    ),
+                ))
+            if period.after_retirement_age_period and start <= eligible_month:
+                pending_age_issues.append(Issue(
+                    code="AFTER_RETIREMENT_AGE_MARKER_CONFLICT",
+                    message=(
+                        f"Dòng {index + 1} được đánh dấu sau tuổi nghỉ hưu nhưng bắt đầu "
+                        "không muộn hơn retirement_age_eligible_month."
+                    ),
+                    fields=(
+                        f"{prefix}.after_retirement_age_period",
+                        "retirement_age_eligible_month",
+                    ),
+                ))
+
+        for month in month_range(start, end):
+            covered_months.add(month)
+            if month in month_owner:
+                owner = month_owner[month]
+                _append(
+                    issues,
+                    "OVERLAPPING_MONTH",
+                    (
+                        f"Tháng {format_year_month(month)} bị trùng giữa dòng "
+                        f"{owner + 1} và dòng {index + 1}."
+                    ),
+                    f"contributions[{owner}]",
+                    prefix,
+                )
+            else:
+                month_owner[month] = index
+
+            if period.participation_status == ParticipationStatus.not_participating:
+                excluded_months.add(month)
+            else:
+                counted_months.add(month)
+                if (
+                    period.participation_status == ParticipationStatus.contributed
+                    and is_pre1995
+                ):
+                    pre1995_excluded_months += 1
+
+    if covered_months:
+        current = min(covered_months)
+        last = max(covered_months)
+        gap_start: date | None = None
+        while current <= last:
+            if current not in covered_months and gap_start is None:
+                gap_start = current
+            if current in covered_months and gap_start is not None:
+                gap_end = current - relativedelta(months=1)
+                _append(
+                    issues,
+                    "UNDECLARED_GAP",
+                    (
+                        f"Khoảng trống {format_year_month(gap_start)}–"
+                        f"{format_year_month(gap_end)} chưa có dòng "
+                        "not_participating."
+                    ),
+                    "contributions",
+                )
+                gap_start = None
+            current = next_month(current)
+        if gap_start is not None:
+            _append(
+                issues,
+                "UNDECLARED_GAP",
+                (
+                    f"Khoảng trống {format_year_month(gap_start)}–"
+                    f"{format_year_month(last)} chưa có dòng not_participating."
+                ),
+                "contributions",
+            )
+
+    threshold_months = 360 if request.person.sex == Sex.female else 420
+    if (
+        request.benefit_calculation_scope
+        == BenefitCalculationScope.pension_and_one_time_allowance
+        and len(counted_months) > threshold_months
+    ):
+        issues.extend(pending_age_issues)
+
+    if (
+        request.benefit_calculation_scope
+        == BenefitCalculationScope.pension_and_one_time_allowance
+        and len(counted_months) > threshold_months
+        and eligible_month is not None
+    ):
+        for index, period in enumerate(request.contributions):
+            if (
+                period.participation_status != ParticipationStatus.not_participating
+                and parse_year_month(period.from_month) > eligible_month
+                and not period.after_retirement_age_period
+            ):
+                _append(
+                    issues,
+                    "POST_RETIREMENT_PERIOD_NOT_MARKED",
+                    (
+                        f"Dòng {index + 1} phát sinh sau tháng đủ tuổi nghỉ hưu nhưng "
+                        "after_retirement_age_period chưa được đặt true."
+                    ),
+                    f"contributions[{index}].after_retirement_age_period",
+                )
+
+    if excluded_months:
+        warnings.append(
+            f"Đã loại {len(excluded_months)} tháng not_participating/BHTN khỏi thời gian và mức bình quân."
+        )
+    if pre1995_excluded_months:
+        warnings.append(
+            f"Đã tính {pre1995_excluded_months} tháng contributed trước 01/1995 vào thời gian nhưng loại khỏi mức bình quân."
+        )
+
+    validation = not issues
+    if issues:
+        warnings.extend(f"[{issue.code}] {issue.message}" for issue in issues)
+
+    return ValidationDiagnostics(
+        response=ValidationResponse(
+            validation=validation,
+            normalized_summary=NormalizedSummary(
+                total_contribution_months=len(counted_months),
+                excluded_bhtn_months=len(excluded_months),
+                contribution_count=len(request.contributions),
+            ),
+            warnings=warnings,
+        ),
+        issues=tuple(issues),
+    )
 
 
-def resolve_period_basis(period, month: date, request: PensionRequest) -> ResolvedBasis:
+def _basis_for_month(
+    request: PensionCalculationRequest,
+    period: Contribution,
+    month: date,
+) -> tuple[Decimal | None, SbhComponentUnit | None]:
     if period.participation_status != ParticipationStatus.contributed:
-        return ResolvedBasis(None)
-    if period.monthly_basis_vnd is not None:
-        return ResolvedBasis(period.monthly_basis_vnd)
-    if period.basis_input_type == BasisInputType.component_sum_vnd and period.basis_components:
-        total = period.basis_components.total()
-        return ResolvedBasis(total if total > 0 else None)
+        return None, None
+    if (
+        month < PRE1995_CUTOFF
+        and period.average_inclusion == AverageInclusion.excluded
+    ):
+        return None, None
+
+    if period.basis_input_type == BasisInputType.monthly_basis_vnd:
+        return period.monthly_basis_vnd, None
+
     if (
         period.basis_input_type == BasisInputType.mau_07_sbh_components
         and period.sbh_components is not None
     ):
-        components = period.sbh_components
-        total = components.total_component_value()
-        if components.unit == SbhComponentUnit.vnd:
-            return ResolvedBasis(
-                total if total > 0 else None,
-                component_unit=components.unit,
-                total_component_value=total,
-            )
+        total = period.sbh_components.total()
+        if period.sbh_components.unit == SbhComponentUnit.vnd:
+            return total, SbhComponentUnit.vnd
 
-        base_salary = components.base_salary_vnd_override
-        if base_salary is None and period.contribution_type == ContributionType.compulsory_state:
-            if month.year < 2016:
-                pension_month = parse_year_month(request.pension_start_month)
-                base_salary = request.reference_level_vnd or base_salary_for_month(pension_month)
-            else:
-                base_salary = base_salary_for_month(month)
-        if base_salary is None:
-            return ResolvedBasis(
-                None,
-                component_unit=components.unit,
-                total_component_value=total,
-            )
-        return ResolvedBasis(
-            total * base_salary,
-            component_unit=components.unit,
-            total_component_value=total,
-            base_salary_used_vnd=base_salary,
-        )
-    return ResolvedBasis(None)
+        pension_month = parse_year_month(request.pension_start_month)
+        if month.year < 2016:
+            reference = base_salary_for_month(pension_month)
+        else:
+            reference = base_salary_for_month(month)
+        return total * reference, SbhComponentUnit.coefficient
+
+    return None, None
 
 
-def validate_contribution_history(request: PensionRequest) -> HistoryValidationResult:
-    issues: list[HistoryIssue] = []
-    overlaps: list[str] = []
-    counted_owner: dict[tuple[int, int], str] = {}
-    non_participation_owner: dict[tuple[int, int], str] = {}
-    covered_months: set[date] = set()
-    counted_months: set[date] = set()
-    average_basis_months: set[date] = set()
-    credited_duration_only_months: set[date] = set()
-    excluded_non_participation_months: set[date] = set()
-    pension_start = parse_year_month(request.pension_start_month)
-
-    if (
-        request.source_document_type != SourceDocumentType.direct_input
-        and not request.history_confirmed
-    ):
-        issues.append(HistoryIssue(
-            code="HISTORY_NOT_CONFIRMED",
-            severity="error",
-            message_vi="Bảng dữ liệu trích xuất từ hồ sơ chưa được người dùng xác nhận.",
-        ))
-
-    for index, period in enumerate(request.contributions, start=1):
-        row_id = period.source_row_id or str(index)
+def expand_records(request: PensionCalculationRequest) -> list[MonthlyRecord]:
+    records: list[MonthlyRecord] = []
+    seen: set[date] = set()
+    eligible_month = (
+        parse_year_month(request.retirement_age_eligible_month)
+        if request.retirement_age_eligible_month
+        else None
+    )
+    for period in request.contributions:
+        if period.participation_status == ParticipationStatus.not_participating:
+            continue
+        assert period.contribution_type is not None
         start = parse_year_month(period.from_month)
         end = parse_year_month(period.to_month)
-
-        # Dòng ghi rõ không tham gia BHXH được chấp nhận và loại khỏi phép tính;
-        # không yêu cầu mức đóng hoặc xác nhận lại.
-        if period.participation_status == ParticipationStatus.not_participating:
-            current = start
-            while current <= end:
-                key = (current.year, current.month)
-                covered_months.add(current)
-                excluded_non_participation_months.add(current)
-                non_participation_owner.setdefault(key, row_id)
-                if key in counted_owner:
-                    label = format_year_month(current)
-                    issues.append(HistoryIssue(
-                        code="CONFLICTING_PARTICIPATION_STATUS",
-                        severity="error",
-                        message_vi=(
-                            f"Tháng {label} vừa được ghi là có thời gian BHXH ở dòng "
-                            f"{counted_owner[key]}, vừa ghi không tham gia ở dòng {row_id}."
-                        ),
-                        source_row_id=row_id,
-                        from_month=label,
-                        to_month=label,
-                    ))
-                current = next_month(current)
-            continue
-
-        if period.confirmation_status != ConfirmationStatus.confirmed:
-            issues.append(HistoryIssue(
-                code="ROW_NOT_CONFIRMED",
-                severity="error",
-                message_vi=f"Dòng {row_id} chưa được xác nhận rõ ràng.",
-                source_row_id=row_id,
-                from_month=period.from_month,
-                to_month=period.to_month,
-            ))
-
-        hazardous_needed = (
-            request.retirement_case == RetirementCase.hazardous_or_special_region
-            or (
-                request.retirement_case == RetirementCase.policy_no_reduction
-                and request.early_retirement_policy is not None
-                and request.early_retirement_policy.age_reference
-                == RetirementAgeReference.hazardous_schedule
+        for month in month_range(start, end):
+            if month in seen:
+                continue
+            seen.add(month)
+            basis, unit = _basis_for_month(request, period, month)
+            average_included = (
+                period.participation_status == ParticipationStatus.contributed
+                and not (
+                    month < PRE1995_CUTOFF
+                    and period.average_inclusion == AverageInclusion.excluded
+                )
             )
-        )
-        if hazardous_needed and period.hazardous_match_status == HazardousMatchStatus.candidate:
-            issues.append(HistoryIssue(
-                code="HAZARDOUS_PERIOD_NOT_CONFIRMED",
-                severity="error",
-                message_vi=(
-                    f"Dòng {row_id} mới là ứng viên nghề nặng nhọc, độc hại; "
-                    "cần người dùng xác nhận tên nghề, điều kiện và thời gian thực tế."
-                ),
-                source_row_id=row_id,
-                from_month=period.from_month,
-                to_month=period.to_month,
-            ))
-
-        if period.contribution_type is None:
-            issues.append(HistoryIssue(
-                code="MISSING_CONTRIBUTION_TYPE",
-                severity="error",
-                message_vi=f"Dòng {row_id} chưa xác định loại quá trình đóng BHXH.",
-                source_row_id=row_id,
-                from_month=period.from_month,
-                to_month=period.to_month,
-            ))
-
-        if period.participation_status == ParticipationStatus.contributed:
-            if period.basis_input_type in {BasisInputType.salary_coefficient, BasisInputType.unknown}:
-                issues.append(HistoryIssue(
-                    code="BASIS_NOT_NORMALIZED_TO_VND",
-                    severity="error",
-                    message_vi=(
-                        f"Dòng {row_id} chưa có mức căn cứ đóng hợp lệ. Nếu đọc từ Mẫu 07/SBH, "
-                        "hãy dùng mau_07_sbh_components và nhập Mức đóng cùng 6 cột phụ cấp."
-                    ),
-                    source_row_id=row_id,
-                    from_month=period.from_month,
-                    to_month=period.to_month,
-                ))
-            else:
-                resolved_start = resolve_period_basis(period, start, request)
-                resolved_end = resolve_period_basis(period, end, request)
-                if resolved_start.amount_vnd is None or resolved_end.amount_vnd is None:
-                    issues.append(HistoryIssue(
-                        code="MISSING_MONTHLY_BASIS",
-                        severity="error",
-                        message_vi=(
-                            f"Dòng {row_id} chưa tính được tổng mức đóng BHXH. Công thức Mẫu 07/SBH: "
-                            "Mức đóng + Chức vụ + TN VK + TN Nghề + Khu vực + Khác + Tái cử."
-                        ),
-                        source_row_id=row_id,
-                        from_month=period.from_month,
-                        to_month=period.to_month,
-                    ))
-                if (
-                    period.basis_input_type == BasisInputType.mau_07_sbh_components
-                    and period.sbh_components is not None
-                    and period.sbh_components.unit == SbhComponentUnit.vnd
-                    and period.contribution_type == ContributionType.compulsory_state
-                    and start.year < 2016
-                    and not request.state_salary_values_are_converted
-                ):
-                    issues.append(HistoryIssue(
-                        code="STATE_PRE2016_VND_NOT_MARKED_CONVERTED",
-                        severity="error",
-                        message_vi=(
-                            f"Dòng {row_id} là lương Nhà nước trước năm 2016 nhập bằng VND nhưng chưa "
-                            "xác nhận đã quy đổi theo mức tham chiếu. Có thể nhập các thành phần bằng hệ số "
-                            "hoặc đặt state_salary_values_are_converted=true sau khi đã quy đổi."
-                        ),
-                        source_row_id=row_id,
-                        from_month=period.from_month,
-                        to_month=period.to_month,
-                    ))
-
-        if start >= pension_start or end >= pension_start:
-            issues.append(HistoryIssue(
-                code="CONTRIBUTION_AFTER_PENSION_START",
-                severity="error",
-                message_vi=(
-                    f"Dòng {row_id} có thời gian được tính BHXH từ tháng bắt đầu hưởng "
-                    "lương hưu hoặc sau tháng đó."
-                ),
-                source_row_id=row_id,
-                from_month=period.from_month,
-                to_month=period.to_month,
-            ))
-
-        current = start
-        while current <= end:
-            key = (current.year, current.month)
-            covered_months.add(current)
-            if key in non_participation_owner:
-                label = format_year_month(current)
-                issues.append(HistoryIssue(
-                    code="CONFLICTING_PARTICIPATION_STATUS",
-                    severity="error",
-                    message_vi=(
-                        f"Tháng {label} vừa được ghi không tham gia ở dòng "
-                        f"{non_participation_owner[key]}, vừa được tính BHXH ở dòng {row_id}."
-                    ),
-                    source_row_id=row_id,
-                    from_month=label,
-                    to_month=label,
-                ))
-            if key in counted_owner:
-                label = format_year_month(current)
-                overlaps.append(label)
-                issues.append(HistoryIssue(
-                    code="OVERLAPPING_MONTH",
-                    severity="error",
-                    message_vi=(
-                        f"Tháng {label} bị trùng giữa dòng {counted_owner[key]} và dòng {row_id}."
-                    ),
-                    source_row_id=row_id,
-                    from_month=label,
-                    to_month=label,
-                ))
-            else:
-                counted_owner[key] = row_id
-                counted_months.add(current)
-                if period.participation_status == ParticipationStatus.contributed:
-                    average_basis_months.add(current)
-                else:
-                    credited_duration_only_months.add(current)
-            current = next_month(current)
-
-    gaps: list[GapPeriod] = []
-    if covered_months:
-        ordered = sorted(covered_months)
-        cursor = ordered[0]
-        last = ordered[-1]
-        while cursor <= last:
-            if cursor not in covered_months:
-                gap_start = cursor
-                while cursor <= last and cursor not in covered_months:
-                    cursor = next_month(cursor)
-                gap_end = cursor - relativedelta(months=1)
-                gaps.append(GapPeriod(
-                    from_month=format_year_month(gap_start),
-                    to_month=format_year_month(gap_end),
-                    months=months_inclusive(gap_start, gap_end),
-                ))
-            else:
-                cursor = next_month(cursor)
-
-    if gaps:
-        severity = "warning" if request.gaps_confirmed_as_non_contribution else "error"
-        code = "CONFIRMED_NON_CONTRIBUTION_GAPS" if severity == "warning" else "UNCONFIRMED_GAPS"
-        gap_text = ", ".join(
-            f"{g.from_month}–{g.to_month} ({g.months} tháng)" for g in gaps
-        )
-        issues.append(HistoryIssue(
-            code=code,
-            severity=severity,
-            message_vi=(
-                "Các khoảng trống đã được xác nhận là thời gian không đóng: "
-                if severity == "warning"
-                else "Cần xác nhận các khoảng trống không được ghi rõ trạng thái: "
-            ) + gap_text,
-        ))
-
-    error_exists = any(i.severity == "error" for i in issues)
-    return HistoryValidationResult(
-        valid_for_calculation=not error_exists,
-        total_unique_months=len(counted_months),
-        average_basis_months=len(average_basis_months),
-        credited_duration_only_months=len(credited_duration_only_months),
-        excluded_non_participation_months=len(excluded_non_participation_months),
-        gaps=gaps,
-        overlaps=sorted(set(overlaps)),
-        issues=issues,
-    )
-
-
-def expand_contributions(request: PensionRequest) -> list[MonthlyRecord]:
-    rows: list[MonthlyRecord] = []
-    seen: set[tuple[int, int]] = set()
-    for index, period in enumerate(request.contributions, start=1):
-        if period.participation_status == ParticipationStatus.not_participating:
-            continue
-        if period.contribution_type is None:
-            continue
-        current = parse_year_month(period.from_month)
-        end = parse_year_month(period.to_month)
-        row_id = period.source_row_id or str(index)
-        while current <= end:
-            key = (current.year, current.month)
-            if key not in seen:
-                seen.add(key)
-                resolved = resolve_period_basis(period, current, request)
-                rows.append(MonthlyRecord(
-                    month=current,
-                    basis=resolved.amount_vnd,
+            after_age = period.after_retirement_age_period or (
+                eligible_month is not None and month > eligible_month
+            )
+            records.append(
+                MonthlyRecord(
+                    month=month,
                     contribution_type=period.contribution_type,
                     participation_status=period.participation_status,
                     basis_input_type=period.basis_input_type,
-                    coefficient_override=period.coefficient_override,
-                    source_row_id=row_id,
-                    qualifying_hazardous=period.qualifying_hazardous,
-                    qualifying_especially_hazardous=period.qualifying_especially_hazardous,
-                    qualifying_underground_coal=period.qualifying_underground_coal,
-                    component_unit=resolved.component_unit,
-                    total_component_value=resolved.total_component_value,
-                    base_salary_used_vnd=resolved.base_salary_used_vnd,
-                ))
-            current = next_month(current)
-    return sorted(rows, key=lambda r: r.month)
-
-
-def build_basis_component_audit(
-    request: PensionRequest, rows: list[MonthlyRecord]
-) -> list[BasisComponentAudit]:
-    rows_by_source: dict[str, list[MonthlyRecord]] = defaultdict(list)
-    for row in rows:
-        if row.source_row_id:
-            rows_by_source[row.source_row_id].append(row)
-
-    audits: list[BasisComponentAudit] = []
-    for index, period in enumerate(request.contributions, start=1):
-        if (
-            period.participation_status != ParticipationStatus.contributed
-            or period.basis_input_type != BasisInputType.mau_07_sbh_components
-            or period.sbh_components is None
-        ):
-            continue
-        row_id = period.source_row_id or str(index)
-        period_rows = rows_by_source.get(row_id, [])
-        basis_values = [r.basis for r in period_rows if r.basis is not None]
-        base_salaries = sorted({
-            r.base_salary_used_vnd
-            for r in period_rows
-            if r.base_salary_used_vnd is not None
-        })
-        c = period.sbh_components
-        allowance_total = c.allowance_total()
-        total = c.total_component_value()
-        component_formula = (
-            f"{c.base_value} + {c.position_allowance} + "
-            f"{c.seniority_beyond_frame_allowance} + "
-            f"{c.professional_seniority_allowance} + {c.regional_allowance} + "
-            f"{c.other_allowance} + {c.reelection_allowance} = {total}"
-        )
-        if c.unit == SbhComponentUnit.vnd:
-            formula = component_formula + " đồng/tháng"
-        elif len(base_salaries) == 1:
-            formula = (
-                component_formula
-                + f" tổng hệ số; {total} × {base_salaries[0]} = "
-                + f"{(total * base_salaries[0]).quantize(MONEY, rounding=ROUND_HALF_UP)} đồng/tháng"
+                    basis_vnd=basis,
+                    component_unit=unit,
+                    average_included=average_included,
+                    after_retirement_age_period=after_age,
+                )
             )
-        elif base_salaries:
-            formula = (
-                component_formula
-                + " tổng hệ số; nhân mức lương cơ sở tương ứng từng tháng: "
-                + ", ".join(str(v) for v in base_salaries)
-            )
-        else:
-            formula = component_formula + " tổng hệ số; chưa xác định lương cơ sở để quy đổi"
-
-        audits.append(BasisComponentAudit(
-            source_row_id=row_id,
-            from_month=period.from_month,
-            to_month=period.to_month,
-            component_unit=c.unit,
-            base_value=c.base_value,
-            position_allowance=c.position_allowance,
-            seniority_beyond_frame_allowance=c.seniority_beyond_frame_allowance,
-            professional_seniority_allowance=c.professional_seniority_allowance,
-            regional_allowance=c.regional_allowance,
-            other_allowance=c.other_allowance,
-            reelection_allowance=c.reelection_allowance,
-            allowance_total=allowance_total,
-            total_component_value=total,
-            base_salary_values_used_vnd=base_salaries,
-            monthly_basis_min_vnd=(
-                min(basis_values).quantize(MONEY, rounding=ROUND_HALF_UP)
-                if basis_values else None
-            ),
-            monthly_basis_max_vnd=(
-                max(basis_values).quantize(MONEY, rounding=ROUND_HALF_UP)
-                if basis_values else None
-            ),
-            formula_vi=formula,
-        ))
-    return audits
+    return sorted(records, key=lambda row: row.month)
 
 
-def base_rate(sex: str, years: Decimal) -> Decimal:
-    if years < Decimal("15"):
-        raise ValueError("Chưa đủ 15 năm để tính tỷ lệ lương hưu.")
-    if sex == "female":
-        rate = Decimal("45") + (years - Decimal("15")) * Decimal("2")
-    elif years < Decimal("20"):
-        rate = Decimal("40") + (years - Decimal("15"))
-    else:
-        rate = Decimal("45") + (years - Decimal("20")) * Decimal("2")
-    return min(Decimal("75"), rate)
-
-
-def completed_age_months(dob: date, on_date: date) -> int:
-    delta = relativedelta(on_date, dob)
-    return max(0, delta.years * 12 + delta.months)
-
-
-def early_reduction(
-    dob: date,
-    sex: str,
-    retirement_end: date,
-    reference_offset_years: int,
-) -> tuple[int, Decimal, str]:
-    age_years, age_months = age_after_offset(
-        sex, retirement_end.year, reference_offset_years
-    )
-    reference_months = age_years * 12 + age_months
-    actual_months = completed_age_months(dob, retirement_end)
-    early_months = max(0, reference_months - actual_months)
-    full_years, remainder = divmod(early_months, 12)
-    reduction = Decimal(full_years * 2) + (Decimal("1") if remainder >= 6 else Decimal("0"))
-    label = f"{age_years} tuổi" + (f" {age_months} tháng" if age_months else "")
-    return early_months, reduction, label
-
-
-def get_coefficient_tables(request: PensionRequest) -> tuple[dict[int, Decimal], dict[int, Decimal]]:
-    benefit_year = int(request.pension_start_month[:4])
-    coefficient_year = request.adjustment.coefficient_year
-    if coefficient_year != benefit_year:
-        raise ValueError(
-            f"Năm bộ hệ số {coefficient_year} không trùng năm bắt đầu hưởng {benefit_year}."
-        )
-    if coefficient_year == 2026:
-        return (
-            request.adjustment.salary_coefficients or COEFFICIENTS_2026,
-            request.adjustment.voluntary_income_coefficients or VOLUNTARY_COEFFICIENTS_2026,
-        )
-    if not request.adjustment.salary_coefficients or not request.adjustment.voluntary_income_coefficients:
-        raise ValueError(
-            f"Chưa có đầy đủ bảng hệ số tiền lương và thu nhập tự nguyện cho năm {coefficient_year}."
-        )
-    return request.adjustment.salary_coefficients, request.adjustment.voluntary_income_coefficients
-
-
-def adjust_record(
-    row: MonthlyRecord,
-    salary_table: dict[int, Decimal],
-    voluntary_table: dict[int, Decimal],
-    first_state_year: int | None,
-    state_values_converted: bool,
-) -> tuple[Decimal, Decimal | None]:
-    if row.basis is None:
-        raise ValueError("Giai đoạn chỉ cộng thời gian không có mức đóng để tính bình quân.")
-    if row.coefficient_override is not None:
-        return row.basis * row.coefficient_override, row.coefficient_override
-    if row.contribution_type == ContributionType.voluntary:
-        coeff = coefficient_for_year(voluntary_table, row.month.year)
-        return row.basis * coeff, coeff
-    if row.contribution_type == ContributionType.compulsory_employer:
-        coeff = coefficient_for_year(salary_table, row.month.year)
-        return row.basis * coeff, coeff
-
-    if row.month.year < 2016:
-        coefficient_components_converted = (
-            row.basis_input_type == BasisInputType.mau_07_sbh_components
-            and row.component_unit == SbhComponentUnit.coefficient
-            and row.base_salary_used_vnd is not None
-        )
-        if (
-            not state_values_converted
-            and row.basis_input_type != BasisInputType.converted_state_vnd
-            and not coefficient_components_converted
-        ):
-            raise ValueError(
-                "Tháng lương Nhà nước trước năm 2016 được dùng tính bình quân nhưng chưa được quy đổi theo quy định."
-            )
-        return row.basis, None
-
-    coeff = coefficient_for_year(salary_table, row.month.year)
-    return row.basis * coeff, coeff
-
-
-def calculate_average_basis(
-    request: PensionRequest, rows: list[MonthlyRecord]
-) -> tuple[Decimal, str, int, int, list[YearlyAdjustmentBreakdown]]:
-    salary_table, voluntary_table = get_coefficient_tables(request)
-
-    # Thời gian chỉ cộng thời gian vẫn có thể xác định mốc bắt đầu chế độ Nhà nước,
-    # nhưng không được đưa vào tử số hoặc mẫu số mức bình quân.
-    state_counted_rows = [
-        r for r in rows if r.contribution_type == ContributionType.compulsory_state
-    ]
-    basis_rows = [r for r in rows if r.included_in_average]
-    state_basis_rows = [
-        r for r in basis_rows if r.contribution_type == ContributionType.compulsory_state
-    ]
-    employer_rows = [
-        r for r in basis_rows if r.contribution_type == ContributionType.compulsory_employer
-    ]
-    voluntary_rows = [
-        r for r in basis_rows if r.contribution_type == ContributionType.voluntary
-    ]
-
-    if not basis_rows:
-        raise ValueError(
-            "Không có tháng tiền lương/thu nhập hợp lệ để tính mức đóng bình quân BHXH."
-        )
-
-    first_state_year = state_counted_rows[0].month.year if state_counted_rows else None
-    state_selected: list[MonthlyRecord] = []
-    if state_basis_rows:
-        years = state_average_years(first_state_year) if first_state_year is not None else None
-        state_selected = state_basis_rows if years is None else state_basis_rows[-years * 12:]
-
-    adjusted: dict[MonthlyRecord, Decimal] = {}
-    yearly = defaultdict(lambda: {
-        "months": 0, "original": Decimal("0"),
-        "adjusted": Decimal("0"), "coeffs": set()
-    })
-
-    rows_directly_used = state_selected + employer_rows + voluntary_rows
-    for row in rows_directly_used:
-        value, coeff = adjust_record(
-            row, salary_table, voluntary_table, first_state_year,
-            request.state_salary_values_are_converted,
-        )
-        adjusted[row] = value
-        key = (row.month.year, row.contribution_type)
-        yearly[key]["months"] += 1
-        yearly[key]["original"] += row.basis or Decimal("0")
-        yearly[key]["adjusted"] += value
-        yearly[key]["coeffs"].add(coeff)
-
-    state_average = Decimal("0")
-    state_months_used = len(state_selected)
-    if state_selected:
-        state_average = sum((adjusted[r] for r in state_selected), Decimal("0")) / Decimal(len(state_selected))
-
-    state_weight_months = len(state_basis_rows)
-    employer_sum = sum((adjusted[r] for r in employer_rows), Decimal("0"))
-    voluntary_sum = sum((adjusted[r] for r in voluntary_rows), Decimal("0"))
-    mandatory_basis_months = state_weight_months + len(employer_rows)
-    all_basis_months = mandatory_basis_months + len(voluntary_rows)
-
-    if mandatory_basis_months:
-        mandatory_total_equivalent = state_average * Decimal(state_weight_months) + employer_sum
-        mandatory_average = mandatory_total_equivalent / Decimal(mandatory_basis_months)
-    else:
-        mandatory_average = Decimal("0")
-
-    if voluntary_rows and mandatory_basis_months:
-        average = (
-            mandatory_average * Decimal(mandatory_basis_months) + voluntary_sum
-        ) / Decimal(all_basis_months)
-        method = "Bình quân chung các tháng có mức đóng BHXH bắt buộc và tự nguyện sau điều chỉnh"
-    elif voluntary_rows:
-        average = voluntary_sum / Decimal(len(voluntary_rows))
-        method = "Bình quân toàn bộ tháng có thu nhập BHXH tự nguyện sau điều chỉnh"
-    elif state_basis_rows and employer_rows:
-        average = (
-            state_average * Decimal(state_weight_months) + employer_sum
-        ) / Decimal(mandatory_basis_months)
-        method = "Bình quân chung lương Nhà nước và lương doanh nghiệp; loại thời gian chỉ cộng thời gian"
-    elif state_basis_rows:
-        average = state_average
-        method = "Bình quân thời kỳ cuối theo chế độ tiền lương Nhà nước"
-    else:
-        average = employer_sum / Decimal(len(employer_rows))
-        method = "Bình quân toàn bộ tháng lương doanh nghiệp sau điều chỉnh"
-
-    breakdown: list[YearlyAdjustmentBreakdown] = []
-    for (year, ctype), data in sorted(yearly.items(), key=lambda x: (x[0][0], x[0][1].value)):
-        coeff_values = data["coeffs"]
-        coeff = next(iter(coeff_values)) if len(coeff_values) == 1 else None
-        breakdown.append(YearlyAdjustmentBreakdown(
-            year=year,
-            contribution_type=ctype,
-            months=data["months"],
-            original_total_vnd=data["original"].quantize(MONEY, rounding=ROUND_HALF_UP),
-            adjusted_total_vnd=data["adjusted"].quantize(MONEY, rounding=ROUND_HALF_UP),
-            coefficient=coeff,
-        ))
-    return average, method, state_months_used, len(rows_directly_used), breakdown
-
-
-def contribution_completion_month(
-    rows: list[MonthlyRecord], required: int, compulsory_only: bool
-) -> date | None:
-    count = 0
-    for row in rows:
-        if compulsory_only and row.contribution_type == ContributionType.voluntary:
-            continue
-        count += 1
-        if count >= required:
-            return row.month
-    return None
-
-
-def build_hazardous_summary(request: PensionRequest) -> HazardousSummary:
-    periods: list[HazardousMatchedPeriod] = []
-    hazardous_months = 0
-    especially_months = 0
-    coal_months = 0
-    for index, period in enumerate(request.contributions, start=1):
-        if (
-            period.participation_status == ParticipationStatus.not_participating
-            or period.hazardous_match_status != HazardousMatchStatus.confirmed
-            or not period.hazardous_user_confirmed
-            or not period.qualifying_hazardous
-            or not period.hazardous_catalog_code
-            or not period.hazardous_catalog_title
-        ):
-            continue
-        months = months_inclusive(
-            parse_year_month(period.from_month), parse_year_month(period.to_month)
-        )
-        hazardous_months += months
-        if period.qualifying_especially_hazardous:
-            especially_months += months
-        if period.qualifying_underground_coal:
-            coal_months += months
-        periods.append(HazardousMatchedPeriod(
-            source_row_id=period.source_row_id or str(index),
-            from_month=period.from_month,
-            to_month=period.to_month,
-            months=months,
-            catalog_code=period.hazardous_catalog_code,
-            catalog_title=period.hazardous_catalog_title,
-            hazardous_class=period.hazardous_class,
-            legal_document=period.hazardous_legal_document,
-        ))
-    return HazardousSummary(
-        confirmed_hazardous_months=hazardous_months,
-        confirmed_especially_hazardous_months=especially_months,
-        confirmed_underground_coal_months=coal_months,
-        exact_hazardous_duration=exact_duration(hazardous_months),
-        confirmed_periods=periods,
-    )
-
-
-def policy_maximum_early_months(
-    code: EarlyRetirementPolicyCode,
-    age_reference: RetirementAgeReference,
-    custom: int | None,
-) -> int | None:
-    if code == EarlyRetirementPolicyCode.nd154_2025_streamlining:
-        return 60
-    if code == EarlyRetirementPolicyCode.nd178_2024_nd67_2025_restructuring:
-        return 60 if age_reference == RetirementAgeReference.hazardous_schedule else 120
-    if code == EarlyRetirementPolicyCode.nd177_2024_non_reappointment:
-        return 60
-    return custom
-
-
-def policy_early_months(
-    request: PensionRequest,
-    retirement_end: date,
-    offset_years: int,
-) -> tuple[int, date]:
-    threshold, threshold_age = threshold_date_for_retirement_year(
+def _normal_threshold(request: PensionCalculationRequest) -> date:
+    return earliest_threshold_date(
         request.person.date_of_birth,
         request.person.sex.value,
-        retirement_end.year,
-        offset_years,
+        0,
     )
-    required_age_months = threshold_age[0] * 12 + threshold_age[1]
-    actual_age_months = completed_age_months(request.person.date_of_birth, retirement_end)
-    return max(0, required_age_months - actual_age_months), threshold
-
-
-def evaluate_early_retirement_policy(
-    request: PensionRequest,
-    retirement_end: date,
-    compulsory_months: int,
-    hazardous_months: int,
-) -> tuple[EarlyRetirementPolicyResult, list[str], list[str], int]:
-    evidence = request.early_retirement_policy
-    reasons: list[str] = []
-    missing: list[str] = []
-    warnings: list[str] = []
-    if evidence is None:
-        return EarlyRetirementPolicyResult(
-            reasons=["Chưa cung cấp căn cứ nghỉ hưu trước tuổi không giảm tỷ lệ."]
-        ), reasons, ["early_retirement_policy"], 0
-
-    offset = 5 if evidence.age_reference == RetirementAgeReference.hazardous_schedule else 0
-    early_months, threshold = policy_early_months(request, retirement_end, offset)
-    maximum = policy_maximum_early_months(
-        evidence.policy_code, evidence.age_reference, evidence.custom_maximum_early_months
-    )
-
-    if compulsory_months < 180:
-        reasons.append(f"Cần ít nhất 180 tháng BHXH bắt buộc; hiện có {compulsory_months} tháng.")
-    if evidence.age_reference == RetirementAgeReference.hazardous_schedule and hazardous_months < 180:
-        reasons.append(
-            f"Cần ít nhất 180 tháng nghề/công việc nặng nhọc đã xác nhận; hiện có {hazardous_months} tháng."
-        )
-    if evidence.confirmation_status != ConfirmationStatus.confirmed:
-        missing.append("early_retirement_policy.confirmation_status")
-    if not evidence.approved_by_competent_authority:
-        missing.append("early_retirement_policy.approved_by_competent_authority")
-    if not evidence.no_reduction_confirmed:
-        missing.append("early_retirement_policy.no_reduction_confirmed")
-    if not evidence.competent_authority_decision_number:
-        missing.append("early_retirement_policy.competent_authority_decision_number")
-    if evidence.competent_authority_decision_date is None:
-        missing.append("early_retirement_policy.competent_authority_decision_date")
-    if maximum is None:
-        missing.append("early_retirement_policy.custom_maximum_early_months")
-    elif early_months > maximum:
-        reasons.append(
-            f"Nghỉ sớm {early_months} tháng, vượt giới hạn {maximum} tháng của chính sách đã chọn."
-        )
-
-    pension_start = parse_year_month(request.pension_start_month)
-    if evidence.policy_code == EarlyRetirementPolicyCode.nd154_2025_streamlining:
-        if pension_start < date(2025, 7, 1) or pension_start > date(2030, 12, 1):
-            reasons.append(
-                "Nghị định 154/2025/NĐ-CP áp dụng từ 16/06/2025 đến hết 31/12/2030."
-            )
-    if evidence.policy_code == EarlyRetirementPolicyCode.nd178_2024_nd67_2025_restructuring:
-        warnings.append(
-            "Chỉ áp dụng khi hồ sơ thuộc đúng phương án sắp xếp và đã được cấp có thẩm quyền phê duyệt."
-        )
-    if evidence.policy_code == EarlyRetirementPolicyCode.nd177_2024_non_reappointment:
-        warnings.append(
-            "Chỉ áp dụng cho đúng nhóm không tái cử, tái bổ nhiệm hoặc nghỉ theo nguyện vọng thuộc phạm vi Nghị định 177/2024/NĐ-CP."
-        )
-
-    eligible_policy = not reasons and not missing
-    result = EarlyRetirementPolicyResult(
-        policy_code=evidence.policy_code,
-        legal_document_number=evidence.legal_document_number,
-        age_reference=evidence.age_reference,
-        reference_threshold_date=threshold,
-        early_retirement_months=early_months,
-        maximum_early_months=maximum,
-        no_reduction_applied=eligible_policy,
-        approved_by_competent_authority=evidence.approved_by_competent_authority,
-        decision_number=evidence.competent_authority_decision_number,
-        reasons=reasons,
-        warnings=warnings,
-    )
-    return result, reasons, missing, offset
 
 
 def determine_eligibility(
-    request: PensionRequest,
-    rows: list[MonthlyRecord],
-    retirement_end: date,
-) -> tuple[EligibilityResult, date | None, int, list[str], EarlyRetirementPolicyResult | None]:
-    total = len(rows)
-    compulsory = sum(1 for r in rows if r.contribution_type != ContributionType.voluntary)
-    voluntary = total - compulsory
-    reasons: list[str] = []
-    missing: list[str] = []
+    request: PensionCalculationRequest,
+    records: list[MonthlyRecord],
+) -> Eligibility:
+    total = len(records)
+    compulsory = sum(
+        1 for row in records if row.contribution_type != ContributionType.voluntary
+    )
+    pension_start = parse_year_month(request.pension_start_month)
+    retirement_end = previous_month_end(pension_start)
+    normal = _normal_threshold(request)
     warnings: list[str] = []
-    regime = PensionRegime.undetermined
-    required_total: int | None = None
-    required_compulsory: int | None = None
-    age_threshold: date | None = None
-    reference_offset = 0
-    policy_result: EarlyRetirementPolicyResult | None = None
-
-    flagged_hazardous = sum(1 for r in rows if r.qualifying_hazardous)
-    flagged_especially = sum(1 for r in rows if r.qualifying_especially_hazardous)
-    flagged_coal = sum(1 for r in rows if r.qualifying_underground_coal)
-    hazardous = flagged_hazardous
-    especially = flagged_especially
-    coal = flagged_coal
-    if request.hazardous_or_special_region_months > flagged_hazardous:
-        warnings.append(
-            "Đã bỏ qua tổng tháng nghề nặng nhọc nhập thủ công; API chỉ dùng các giai đoạn đã đối chiếu danh mục và người dùng xác nhận."
-        )
-
-    if request.retirement_case in {RetirementCase.occupational_hiv, RetirementCase.armed_forces}:
-        reasons.append("Trường hợp đặc thù này chưa được tự động hóa đầy đủ.")
-        return EligibilityResult(
-            eligible=False, case=request.retirement_case, regime=regime,
-            reasons=reasons, missing_fields=missing,
-        ), None, reference_offset, warnings, policy_result
 
     if request.retirement_case == RetirementCase.normal:
-        required_total = 180
-        if compulsory >= 180:
-            regime = PensionRegime.compulsory if voluntary == 0 else PensionRegime.mixed_compulsory_policy
-            required_compulsory = 180
-        elif total >= 180 and voluntary > 0:
-            regime = PensionRegime.voluntary if compulsory == 0 else PensionRegime.mixed_voluntary_policy
-        else:
-            regime = PensionRegime.compulsory if voluntary == 0 else PensionRegime.mixed_voluntary_policy
-            if voluntary == 0:
-                required_compulsory = 180
-            reasons.append(f"Chưa đủ 180 tháng đóng BHXH; hiện có {total} tháng.")
-        age_threshold, _ = threshold_date_for_retirement_year(
-            request.person.date_of_birth, request.person.sex.value, retirement_end.year, 0
-        )
-
-    elif request.retirement_case == RetirementCase.hazardous_or_special_region:
-        regime = PensionRegime.compulsory if voluntary == 0 else PensionRegime.mixed_compulsory_policy
-        required_compulsory = 180
-        if compulsory < 180:
-            reasons.append(f"Cần ít nhất 180 tháng BHXH bắt buộc; hiện có {compulsory} tháng.")
-        if hazardous < 180:
-            reasons.append(f"Cần ít nhất 180 tháng nghề/địa bàn đủ điều kiện; hiện có {hazardous} tháng.")
-        age_threshold, _ = threshold_date_for_retirement_year(
-            request.person.date_of_birth, request.person.sex.value, retirement_end.year, 5
-        )
-
-    elif request.retirement_case == RetirementCase.underground_coal:
-        regime = PensionRegime.compulsory if voluntary == 0 else PensionRegime.mixed_compulsory_policy
-        required_compulsory = 180
-        if compulsory < 180:
-            reasons.append(f"Cần ít nhất 180 tháng BHXH bắt buộc; hiện có {compulsory} tháng.")
-        if coal < 180:
-            reasons.append(f"Cần ít nhất 180 tháng khai thác than hầm lò; hiện có {coal} tháng.")
-        age_threshold, _ = threshold_date_for_retirement_year(
-            request.person.date_of_birth, request.person.sex.value, retirement_end.year, 10
-        )
-
-    elif request.retirement_case == RetirementCase.policy_no_reduction:
-        regime = PensionRegime.compulsory if voluntary == 0 else PensionRegime.mixed_compulsory_policy
-        required_compulsory = 180
-        policy_result, policy_reasons, policy_missing, reference_offset = evaluate_early_retirement_policy(
-            request, retirement_end, compulsory, hazardous
-        )
-        reasons.extend(policy_reasons)
-        missing.extend(policy_missing)
-        warnings.extend(policy_result.warnings)
-        age_threshold = policy_result.reference_threshold_date
-
-    elif request.retirement_case == RetirementCase.reduced_capacity:
-        regime = PensionRegime.compulsory if voluntary == 0 else PensionRegime.mixed_compulsory_policy
-        required_compulsory = 240
-        if compulsory < 240:
-            reasons.append(f"Cần ít nhất 240 tháng BHXH bắt buộc; hiện có {compulsory} tháng.")
-        if request.impairment_percent is None:
-            missing.append("impairment_percent")
-        elif request.impairment_percent < 61:
-            reasons.append("Tỷ lệ suy giảm khả năng lao động dưới 61%.")
-        elif especially >= 180:
-            age_threshold = None
-            reference_offset = 5
-            if request.impairment_assessment_month is None:
-                warnings.append(
-                    "Chưa có tháng kết luận giám định; trợ cấp một lần sau thời điểm đủ điều kiện không thể tách chính xác."
+        if request.retirement_policy == RetirementPolicy.decree_154_streamlining:
+            if compulsory < 180:
+                raise BusinessError(
+                    "INSUFFICIENT_COMPULSORY_CONTRIBUTION",
+                    (
+                        "Trường hợp decree_154_streamlining cần ít nhất 180 tháng "
+                        f"BHXH bắt buộc; hiện có {compulsory} tháng."
+                    ),
+                    ["contributions"],
                 )
-        elif request.impairment_percent >= 81:
-            age_threshold, _ = threshold_date_for_retirement_year(
-                request.person.date_of_birth, request.person.sex.value, retirement_end.year, 10
+            threshold = earliest_threshold_date(
+                request.person.date_of_birth,
+                request.person.sex.value,
+                5,
             )
-        else:
-            age_threshold, _ = threshold_date_for_retirement_year(
-                request.person.date_of_birth, request.person.sex.value, retirement_end.year, 5
+            if retirement_end < threshold:
+                raise BusinessError(
+                    "RETIREMENT_AGE_NOT_REACHED",
+                    (
+                        f"Ngày nghỉ {retirement_end.isoformat()} chưa đạt ngưỡng "
+                        f"{threshold.isoformat()} của chính sách."
+                    ),
+                    ["person.date_of_birth", "pension_start_month"],
+                )
+            early_months = months_difference(normal, retirement_end)
+            warnings.append(
+                "Áp dụng retirement_policy=decree_154_streamlining: không giảm tỷ lệ; request được coi là đã có căn cứ chính sách hợp lệ."
+            )
+            return Eligibility(
+                retirement_threshold=threshold,
+                normal_threshold=normal,
+                early_retirement_months=early_months,
+                early_retirement_reduction=Decimal("0"),
+                warnings=tuple(warnings),
             )
 
-    if (
-        age_threshold is not None
-        and retirement_end < age_threshold
-        and request.retirement_case != RetirementCase.policy_no_reduction
-    ):
-        reasons.append(
-            f"Ngày nghỉ {retirement_end.isoformat()} chưa đạt ngưỡng tuổi {age_threshold.isoformat()} của trường hợp này."
+        if total < 180:
+            raise BusinessError(
+                "INSUFFICIENT_CONTRIBUTION",
+                f"Cần ít nhất 180 tháng đóng BHXH; hiện có {total} tháng.",
+                ["contributions"],
+            )
+        threshold = normal
+        if retirement_end < threshold:
+            raise BusinessError(
+                "RETIREMENT_AGE_NOT_REACHED",
+                (
+                    f"Ngày nghỉ {retirement_end.isoformat()} chưa đạt tuổi nghỉ hưu "
+                    f"bình thường tại {threshold.isoformat()}."
+                ),
+                ["person.date_of_birth", "pension_start_month"],
+            )
+        return Eligibility(threshold, normal, 0, Decimal("0"))
+
+    if request.retirement_case == RetirementCase.hazardous_or_special_region:
+        if compulsory < 180:
+            raise BusinessError(
+                "INSUFFICIENT_COMPULSORY_CONTRIBUTION",
+                f"Cần ít nhất 180 tháng BHXH bắt buộc; hiện có {compulsory} tháng.",
+                ["contributions"],
+            )
+        threshold = earliest_threshold_date(
+            request.person.date_of_birth,
+            request.person.sex.value,
+            5,
+        )
+        if retirement_end < threshold:
+            raise BusinessError(
+                "RETIREMENT_AGE_NOT_REACHED",
+                (
+                    f"Ngày nghỉ {retirement_end.isoformat()} chưa đạt ngưỡng tuổi "
+                    f"{threshold.isoformat()}."
+                ),
+                ["person.date_of_birth", "pension_start_month"],
+            )
+        warnings.append(
+            "retirement_case=hazardous_or_special_region được coi là đã có căn cứ xác nhận nghề/địa bàn theo hồ sơ."
+        )
+        return Eligibility(threshold, normal, 0, Decimal("0"), tuple(warnings))
+
+    if request.retirement_case == RetirementCase.underground_coal:
+        if compulsory < 180:
+            raise BusinessError(
+                "INSUFFICIENT_COMPULSORY_CONTRIBUTION",
+                f"Cần ít nhất 180 tháng BHXH bắt buộc; hiện có {compulsory} tháng.",
+                ["contributions"],
+            )
+        threshold = earliest_threshold_date(
+            request.person.date_of_birth,
+            request.person.sex.value,
+            10,
+        )
+        if retirement_end < threshold:
+            raise BusinessError(
+                "RETIREMENT_AGE_NOT_REACHED",
+                (
+                    f"Ngày nghỉ {retirement_end.isoformat()} chưa đạt ngưỡng tuổi "
+                    f"{threshold.isoformat()}."
+                ),
+                ["person.date_of_birth", "pension_start_month"],
+            )
+        warnings.append(
+            "retirement_case=underground_coal được coi là đã có căn cứ xác nhận thời gian khai thác than hầm lò."
+        )
+        return Eligibility(threshold, normal, 0, Decimal("0"), tuple(warnings))
+
+    if compulsory < 240:
+        raise BusinessError(
+            "INSUFFICIENT_COMPULSORY_CONTRIBUTION",
+            (
+                "Trường hợp reduced_capacity cần ít nhất 240 tháng BHXH bắt buộc; "
+                f"hiện có {compulsory} tháng."
+            ),
+            ["contributions"],
+        )
+    assert request.impairment_percent is not None
+    offset = 10 if request.impairment_percent >= Decimal("81") else 5
+    threshold = earliest_threshold_date(
+        request.person.date_of_birth,
+        request.person.sex.value,
+        offset,
+    )
+    if retirement_end < threshold:
+        raise BusinessError(
+            "RETIREMENT_AGE_NOT_REACHED",
+            (
+                f"Ngày nghỉ {retirement_end.isoformat()} chưa đạt ngưỡng tuổi "
+                f"{threshold.isoformat()} của trường hợp suy giảm."
+            ),
+            ["person.date_of_birth", "pension_start_month", "impairment_percent"],
         )
 
-    months_short = 0
-    if required_compulsory is not None and compulsory < required_compulsory:
-        months_short = required_compulsory - compulsory
-    elif required_total is not None and total < required_total:
-        months_short = required_total - total
-
-    can_pay_missing = (
-        request.retirement_case == RetirementCase.normal
-        and required_compulsory == 180
-        and 1 <= months_short <= 6
-        and age_threshold is not None
-        and retirement_end >= age_threshold
-    ) or (
-        request.retirement_case == RetirementCase.reduced_capacity
-        and 1 <= months_short <= 6
-        and (age_threshold is None or retirement_end >= age_threshold)
+    early_months = months_difference(normal, retirement_end)
+    full_years, remainder = divmod(early_months, 12)
+    reduction = Decimal(full_years * 2)
+    if remainder >= 6:
+        reduction += Decimal("1")
+    return Eligibility(
+        threshold,
+        normal,
+        early_months,
+        reduction,
+        (
+            "Giảm tỷ lệ reduced_capacity: 2 điểm phần trăm mỗi năm nghỉ sớm; phần lẻ từ 6 tháng giảm thêm 1 điểm.",
+        ),
     )
 
-    eligible = not reasons and not missing
-    return EligibilityResult(
-        eligible=eligible,
-        case=request.retirement_case,
-        regime=regime,
-        reasons=reasons,
-        missing_fields=missing,
-        required_total_months=required_total,
-        required_compulsory_months=required_compulsory,
-        months_short=months_short,
-        can_pay_missing_months_once=can_pay_missing,
-    ), age_threshold, reference_offset, warnings, policy_result
 
-
-def determine_eligibility_achieved_month(
-    request: PensionRequest,
-    rows: list[MonthlyRecord],
-    eligibility: EligibilityResult,
-    age_threshold: date | None,
-) -> date | None:
-    if request.eligibility_achieved_month:
-        return parse_year_month(request.eligibility_achieved_month)
-
-    candidates: list[date] = []
-    if age_threshold is not None:
-        candidates.append(date(age_threshold.year, age_threshold.month, 1))
-
-    if eligibility.required_compulsory_months:
-        completion = contribution_completion_month(
-            rows, eligibility.required_compulsory_months, compulsory_only=True
+def _adjusted_value(
+    row: MonthlyRecord,
+    salary_table: dict[int, Decimal],
+    voluntary_table: dict[int, Decimal],
+) -> Decimal:
+    if row.basis_vnd is None:
+        raise BusinessError(
+            "AVERAGE_BASIS_MISSING",
+            f"Không có mức đóng hợp lệ tại tháng {format_year_month(row.month)}.",
+            ["contributions"],
         )
-        if completion:
-            candidates.append(completion)
-    elif eligibility.required_total_months:
-        completion = contribution_completion_month(rows, eligibility.required_total_months, False)
-        if completion:
-            candidates.append(completion)
 
-    if request.retirement_case == RetirementCase.policy_no_reduction:
-        return parse_year_month(request.pension_start_month)
+    if row.contribution_type == ContributionType.voluntary:
+        try:
+            coefficient = coefficient_for_year(voluntary_table, row.month.year)
+        except ValueError as exc:
+            raise BusinessError(
+                "VOLUNTARY_COEFFICIENT_MISSING",
+                str(exc),
+                ["pension_start_month", "contributions"],
+            ) from exc
+        return row.basis_vnd * coefficient
 
-    if request.retirement_case == RetirementCase.reduced_capacity:
-        if not request.impairment_assessment_month:
-            return None
-        candidates.append(parse_year_month(request.impairment_assessment_month))
+    if row.contribution_type == ContributionType.compulsory_employer:
+        try:
+            coefficient = coefficient_for_year(salary_table, row.month.year)
+        except ValueError as exc:
+            raise BusinessError(
+                "SALARY_COEFFICIENT_MISSING",
+                str(exc),
+                ["pension_start_month", "contributions"],
+            ) from exc
+        return row.basis_vnd * coefficient
 
-    return max(candidates) if candidates else None
+    # Lương Nhà nước theo hệ số trước 2016 đã được quy đổi bằng mức lương
+    # cơ sở/mức tham chiếu tại tháng hưởng. Dữ liệu VND xác nhận trước 2016
+    # cũng được coi là mức đã quy đổi, tránh điều chỉnh hai lần.
+    if row.month.year < 2016:
+        return row.basis_vnd
+
+    try:
+        coefficient = coefficient_for_year(salary_table, row.month.year)
+    except ValueError as exc:
+        raise BusinessError(
+            "SALARY_COEFFICIENT_MISSING",
+            str(exc),
+            ["pension_start_month", "contributions"],
+        ) from exc
+    return row.basis_vnd * coefficient
+
+
+def calculate_average_salary(
+    request: PensionCalculationRequest,
+    records: list[MonthlyRecord],
+) -> tuple[Decimal, list[str]]:
+    salary_table, voluntary_table = adjustment_tables()
+    basis_rows = [row for row in records if row.average_included]
+    if not basis_rows:
+        raise BusinessError(
+            "NO_AVERAGE_BASIS",
+            "Không có tháng mức đóng hợp lệ dùng tính mức bình quân.",
+            ["contributions"],
+        )
+
+    state_counted = [
+        row for row in records if row.contribution_type == ContributionType.compulsory_state
+    ]
+    state_basis = [
+        row for row in basis_rows if row.contribution_type == ContributionType.compulsory_state
+    ]
+    employer = [
+        row for row in basis_rows if row.contribution_type == ContributionType.compulsory_employer
+    ]
+    voluntary = [
+        row for row in basis_rows if row.contribution_type == ContributionType.voluntary
+    ]
+
+    selected_state: list[MonthlyRecord] = []
+    state_window: int | None = None
+    if state_basis:
+        first_state = format_year_month(state_counted[0].month)
+        state_window = state_average_months(first_state)
+        selected_state = state_basis if state_window is None else state_basis[-state_window:]
+
+    state_adjusted = [_adjusted_value(row, salary_table, voluntary_table) for row in selected_state]
+    employer_adjusted = [_adjusted_value(row, salary_table, voluntary_table) for row in employer]
+    voluntary_adjusted = [_adjusted_value(row, salary_table, voluntary_table) for row in voluntary]
+
+    state_average = (
+        sum(state_adjusted, Decimal("0")) / Decimal(len(state_adjusted))
+        if state_adjusted
+        else Decimal("0")
+    )
+    state_weight_months = len(state_basis)
+    mandatory_months = state_weight_months + len(employer)
+    total_basis_months = mandatory_months + len(voluntary)
+
+    mandatory_equivalent = (
+        state_average * Decimal(state_weight_months)
+        + sum(employer_adjusted, Decimal("0"))
+    )
+    total_equivalent = mandatory_equivalent + sum(voluntary_adjusted, Decimal("0"))
+    average = total_equivalent / Decimal(total_basis_months)
+
+    if state_basis and (employer or voluntary):
+        method = (
+            "Bình quân chung quá trình hỗn hợp; phần lương Nhà nước lấy bình quân "
+            "theo cửa sổ quy định rồi quy đổi theo số tháng."
+        )
+    elif state_basis:
+        method = "Bình quân thời kỳ cuối theo chế độ tiền lương Nhà nước."
+    elif employer and voluntary:
+        method = "Bình quân chung lương doanh nghiệp và thu nhập BHXH tự nguyện sau điều chỉnh."
+    elif voluntary:
+        method = "Bình quân toàn bộ thu nhập BHXH tự nguyện sau điều chỉnh."
+    else:
+        method = "Bình quân toàn bộ lương doanh nghiệp sau điều chỉnh."
+
+    warnings = [
+        f"Phương pháp mức bình quân: {method}",
+        (
+            f"Số tháng mức đóng trực tiếp dùng trong phép tính: "
+            f"{len(selected_state) + len(employer) + len(voluntary)}; "
+            f"số tháng được quy đổi trọng số trong bình quân chung: {total_basis_months}."
+        ),
+    ]
+    if state_window is not None and len(state_basis) < state_window:
+        warnings.append(
+            f"Quá trình lương Nhà nước có {len(state_basis)} tháng có mức đóng, ít hơn cửa sổ {state_window} tháng; API dùng toàn bộ tháng hiện có."
+        )
+    return average, warnings
+
+
+def calculate_rate(
+    sex: Sex,
+    total_months: int,
+    early_reduction: Decimal,
+) -> tuple[Decimal, Decimal, Decimal]:
+    if total_months < 180:
+        raise BusinessError(
+            "INSUFFICIENT_CONTRIBUTION",
+            f"Cần ít nhất 180 tháng; hiện có {total_months} tháng.",
+            ["contributions"],
+        )
+    full_years, remainder = divmod(total_months, 12)
+    remainder_rate = (
+        Decimal("0")
+        if remainder == 0
+        else Decimal("1")
+        if remainder <= 6
+        else Decimal("2")
+    )
+
+    if sex == Sex.female:
+        before = Decimal("45") + Decimal(max(0, full_years - 15) * 2) + remainder_rate
+    elif full_years < 20:
+        before = Decimal("40") + Decimal(max(0, full_years - 15)) + remainder_rate
+    else:
+        before = Decimal("45") + Decimal(max(0, full_years - 20) * 2) + remainder_rate
+
+    before = min(Decimal("75"), before)
+    after = max(Decimal("0"), before - early_reduction)
+    return before, remainder_rate, after
 
 
 def calculate_one_time_allowance(
-    request: PensionRequest,
-    rows: list[MonthlyRecord],
-    eligibility: EligibilityResult,
-    age_threshold: date | None,
+    request: PensionCalculationRequest,
+    records: list[MonthlyRecord],
     average: Decimal,
-) -> tuple[Decimal | None, str | None]:
-    rounded_years = rounded_years_for_rate(len(rows))
-    threshold = Decimal("35") if request.person.sex == "male" else Decimal("30")
-    excess = max(Decimal("0"), rounded_years - threshold)
-    if excess == 0:
-        return Decimal("0"), None
+    eligibility: Eligibility,
+) -> OneTimeRetirementAllowance | None:
+    if request.benefit_calculation_scope == BenefitCalculationScope.pension_only:
+        return None
 
-    achieved = determine_eligibility_achieved_month(request, rows, eligibility, age_threshold)
-    if achieved is None:
-        return None, (
-            "Không đủ dữ liệu xác định thời điểm đã đồng thời đáp ứng mọi điều kiện để tách mức 0,5 và 2 lần."
+    threshold_months = 360 if request.person.sex == Sex.female else 420
+    total_months = len(records)
+    total_excess = max(0, total_months - threshold_months)
+    warnings: list[str] = []
+
+    derived_eligible_month = date(
+        eligibility.retirement_threshold.year,
+        eligibility.retirement_threshold.month,
+        1,
+    )
+    eligible_month = (
+        parse_year_month(request.retirement_age_eligible_month)
+        if request.retirement_age_eligible_month
+        else derived_eligible_month
+    )
+    if request.retirement_age_eligible_month is None:
+        warnings.append(
+            "retirement_age_eligible_month không được cung cấp; API suy ra từ ngày sinh, giới tính và retirement_case."
         )
-    post_months = sum(1 for r in rows if r.month > achieved)
-    post_years = min(excess, rounded_years_for_rate(post_months))
-    pre_years = max(Decimal("0"), excess - post_years)
-    amount = average * (Decimal("0.5") * pre_years + Decimal("2") * post_years)
-    return amount.quantize(MONEY, rounding=ROUND_HALF_UP), None
+    elif total_excess > 0 and eligible_month != derived_eligible_month:
+        raise BusinessError(
+            "RETIREMENT_AGE_MONTH_MISMATCH",
+            (
+                f"retirement_age_eligible_month={format_year_month(eligible_month)} "
+                f"không khớp tháng API tra theo lộ trình là "
+                f"{format_year_month(derived_eligible_month)}."
+            ),
+            ["retirement_age_eligible_month", "person.date_of_birth", "retirement_case"],
+        )
 
-
-def empty_average(request: PensionRequest) -> AverageBasisResult:
-    return AverageBasisResult(
-        amount_vnd=None,
-        average_monthly_basis_vnd=None,
-        basis_months_used=0,
-        method=None,
-        coefficient_year=request.adjustment.coefficient_year,
-        state_average_months_used=0,
-        yearly_breakdown=[],
-    )
-
-
-def empty_rate() -> PensionRateResult:
-    return PensionRateResult(
-        rounded_years=None,
-        base_rate_percent=None,
-        early_retirement_months=0,
-        early_retirement_reduction_percent=Decimal("0"),
-        final_rate_percent=None,
-    )
-
-
-def calculate_pension(request: PensionRequest) -> PensionResponse:
-    calculation_id = str(uuid4())
-    history = validate_contribution_history(request)
-    rows = expand_contributions(request)
-    basis_component_audit = build_basis_component_audit(request, rows)
-    hazardous_summary = build_hazardous_summary(request)
-    total = len(rows)
-    compulsory = sum(1 for r in rows if r.contribution_type != ContributionType.voluntary)
-    voluntary = total - compulsory
-    rounded_years = rounded_years_for_rate(total)
-    start_month = parse_year_month(request.pension_start_month)
-    retirement_end = previous_month_end(start_month)
-
-    normal_threshold, normal_age = threshold_date_for_retirement_year(
-        request.person.date_of_birth,
-        request.person.sex.value,
-        retirement_end.year,
-        0,
-    )
-    earliest_normal_threshold, _ = earliest_threshold_for_schedule(
-        request.person.date_of_birth, request.person.sex.value, 0
-    )
-    earliest_normal_start = next_month(date(
-        earliest_normal_threshold.year, earliest_normal_threshold.month, 1
-    ))
-    normal_age_label = f"{normal_age[0]} tuổi" + (
-        f" {normal_age[1]} tháng" if normal_age[1] else ""
-    )
-
-    average_basis_months = sum(1 for r in rows if r.included_in_average)
-    credited_duration_only_months = sum(
-        1 for r in rows if r.participation_status == ParticipationStatus.credited_duration_only
-    )
-    summary = ContributionSummary(
-        total_months=total,
-        compulsory_months=compulsory,
-        voluntary_months=voluntary,
-        average_basis_months=average_basis_months,
-        credited_duration_only_months=credited_duration_only_months,
-        excluded_non_participation_months=history.excluded_non_participation_months,
-        exact_duration=exact_duration(total),
-        rounded_years_for_rate=rounded_years,
-    )
-
-    assumptions = [
-        "pension_start_month là tháng đầu tiên hưởng; ngày nghỉ được hiểu là ngày cuối tháng trước.",
-        "Mỗi khoảng đóng bao gồm cả tháng bắt đầu và tháng kết thúc.",
-        "Dòng ghi rõ không tham gia BHXH được loại khỏi cả thời gian và mức bình quân.",
-        "Giai đoạn credited_duration_only chỉ cộng thời gian hưởng, không đưa mức lương vào bình quân.",
-        "Với Mẫu 07/SBH dùng thành phần, tổng hệ số/mức đóng bằng Mức đóng + Chức vụ + TN VK + TN Nghề + Khu vực + Khác + Tái cử.",
-    ]
-    warnings = [
-        "Kết quả là ước tính; hồ sơ được cơ quan BHXH xác nhận và quy định có hiệu lực tại thời điểm giải quyết là căn cứ cuối cùng."
-    ]
-    audit = [
-        f"Chuẩn hóa được {total} tháng được tính là thời gian tham gia BHXH.",
-        f"Có {average_basis_months} tháng có mức đóng dùng tính bình quân; "
-        f"{credited_duration_only_months} tháng chỉ cộng thời gian; "
-        f"{history.excluded_non_participation_months} tháng không tham gia đã loại bỏ.",
-        f"Thời gian dùng tính tỷ lệ sau làm tròn: {rounded_years} năm.",
-    ]
-
-    if not history.valid_for_calculation:
-        missing = sorted({i.code for i in history.issues if i.severity == "error"})
-        eligibility = EligibilityResult(
+    if total_excess == 0:
+        return OneTimeRetirementAllowance(
             eligible=False,
-            case=request.retirement_case,
-            regime=PensionRegime.undetermined,
-            reasons=[i.message_vi for i in history.issues if i.severity == "error"],
-            missing_fields=missing,
-        )
-        return PensionResponse(
-            calculation_id=calculation_id,
-            status="needs_more_data",
-            error_code="CONTRIBUTION_HISTORY_INVALID",
-            legal_rule_version=LEGAL_RULE_VERSION,
-            requested_pension_start_month=request.pension_start_month,
-            retirement_end_date=retirement_end,
-            normal_retirement_age_in_retirement_year=normal_age_label,
-            normal_retirement_threshold_date=normal_threshold,
-            earliest_normal_pension_start_month=format_year_month(earliest_normal_start),
-            history_validation=history,
-            contribution_summary=summary,
-            hazardous_summary=hazardous_summary,
-            early_retirement_policy_result=None,
-            eligibility=eligibility,
-            average_basis=empty_average(request),
-            basis_component_audit=basis_component_audit,
-            pension_rate=empty_rate(),
-            estimated_monthly_pension_vnd=None,
-            pension_calculation_formula=None,
-            one_time_retirement_allowance_vnd=None,
-            assumptions=assumptions,
+            threshold_months=threshold_months,
+            total_excess_months=0,
+            excess_before_retirement_age_months=0,
+            excess_after_retirement_age_months=0,
+            standard_allowance_amount=0.0,
+            post_retirement_allowance_amount=0.0,
+            total_allowance_amount=0.0,
+            average_basis=float(average.quantize(MONEY, rounding=ROUND_HALF_UP)),
             warnings=warnings,
-            audit_steps=audit,
-            legal_references=[LegalReference(**ref) for ref in LEGAL_REFERENCES],
         )
 
-    (
-        eligibility,
-        age_threshold,
-        reduction_reference_offset,
-        eligibility_warnings,
-        policy_result,
-    ) = determine_eligibility(request, rows, retirement_end)
-    warnings.extend(eligibility_warnings)
-    audit.append(
-        f"Nghề nặng nhọc đã xác nhận: {hazardous_summary.confirmed_hazardous_months} tháng "
-        f"({hazardous_summary.exact_hazardous_duration})."
+    months_to_age = sum(1 for row in records if row.month <= eligible_month)
+    excess_before = max(0, months_to_age - threshold_months)
+    excess_before = min(excess_before, total_excess)
+    excess_after = total_excess - excess_before
+
+    standard = (
+        average
+        * Decimal(excess_before)
+        / Decimal("12")
+        * Decimal("0.5")
     )
-    if policy_result is not None:
-        audit.append(
-            f"Chính sách nghỉ trước tuổi: {policy_result.policy_code}; nghỉ sớm "
-            f"{policy_result.early_retirement_months} tháng; không giảm tỷ lệ: "
-            f"{policy_result.no_reduction_applied}."
-        )
-
-    manual = request.retirement_case in {
-        RetirementCase.occupational_hiv,
-        RetirementCase.armed_forces,
-    }
-    status = "manual_review" if manual else "eligible" if eligibility.eligible else (
-        "needs_more_data" if eligibility.missing_fields else "not_eligible"
+    post = (
+        average
+        * Decimal(excess_after)
+        / Decimal("12")
+        * Decimal("2")
     )
+    total = standard + post
+    standard_rounded = standard.quantize(MONEY, rounding=ROUND_HALF_UP)
+    post_rounded = post.quantize(MONEY, rounding=ROUND_HALF_UP)
+    total_rounded = total.quantize(MONEY, rounding=ROUND_HALF_UP)
 
-    average_result = empty_average(request)
-    rate_result = empty_rate()
-    estimated_pension: Decimal | None = None
-    pension_formula: str | None = None
-    allowance: Decimal | None = None
-    floor_applied = False
-    error_code: str | None = None
-
-    if total >= 180:
-        try:
-            average, method, state_months, basis_months_used, breakdown = calculate_average_basis(request, rows)
-            rounded_average = average.quantize(MONEY, rounding=ROUND_HALF_UP)
-            average_result = AverageBasisResult(
-                amount_vnd=rounded_average,
-                average_monthly_basis_vnd=rounded_average,
-                basis_months_used=basis_months_used,
-                method=method,
-                coefficient_year=request.adjustment.coefficient_year,
-                state_average_months_used=state_months,
-                yearly_breakdown=breakdown,
-            )
-            base = base_rate(request.person.sex.value, rounded_years)
-            early_months = 0
-            reduction = Decimal("0")
-            reduction_age = None
-            if request.retirement_case == RetirementCase.reduced_capacity:
-                early_months, reduction, reduction_age = early_reduction(
-                    request.person.date_of_birth,
-                    request.person.sex.value,
-                    retirement_end,
-                    reduction_reference_offset,
-                )
-            final = max(Decimal("0"), base - reduction)
-            rate_result = PensionRateResult(
-                rounded_years=rounded_years,
-                base_rate_percent=base,
-                early_retirement_months=early_months,
-                early_retirement_reduction_percent=reduction,
-                final_rate_percent=final,
-                reduction_reference_age=reduction_age,
-            )
-            audit.append(f"Tính mức bình quân theo phương pháp: {method}.")
-            audit.append(f"Tỷ lệ cơ bản {base}%, giảm {reduction}%, còn {final}%.")
-
-            if eligibility.eligible:
-                estimated_pension = (average * final / Decimal("100")).quantize(
-                    MONEY, rounding=ROUND_HALF_UP
-                )
-                pension_formula = (
-                    f"{average_result.average_monthly_basis_vnd} × {final}% = "
-                    f"{estimated_pension} đồng/tháng"
-                )
-                allowance, allowance_warning = calculate_one_time_allowance(
-                    request, rows, eligibility, age_threshold, average
-                )
-                if allowance_warning:
-                    warnings.append(allowance_warning)
-
-                joined_before_transition = any(
-                    r.contribution_type != ContributionType.voluntary
-                    and r.month < date(2025, 7, 1)
-                    for r in rows
-                )
-                if request.transitional_minimum_floor_eligible:
-                    if not request.reference_level_vnd:
-                        warnings.append(
-                            "Đã chọn áp dụng mức sàn chuyển tiếp nhưng chưa cung cấp mức tham chiếu."
-                        )
-                    elif compulsory >= 240 and joined_before_transition and estimated_pension < request.reference_level_vnd:
-                        estimated_pension = request.reference_level_vnd.quantize(MONEY, rounding=ROUND_HALF_UP)
-                        floor_applied = True
-                elif compulsory >= 240 and joined_before_transition:
-                    warnings.append(
-                        "API không tự áp dụng mức sàn chuyển tiếp nếu chưa xác nhận transitional_minimum_floor_eligible."
-                    )
-
-        except ValueError as exc:
-            status = "needs_more_data"
-            error_code = "CALCULATION_INPUT_INCOMPLETE"
-            eligibility.eligible = False
-            eligibility.missing_fields.append("calculation_input")
-            eligibility.reasons.append(str(exc))
-            warnings.append(str(exc))
-            estimated_pension = None
-            allowance = None
-    elif eligibility.can_pay_missing_months_once:
-        warnings.append(
-            "Có thể thuộc trường hợp được đóng một lần cho số tháng còn thiếu theo quy định; API chưa tự cộng thời gian giả định này."
-        )
-
-    if not eligibility.eligible:
-        estimated_pension = None
-        pension_formula = None
-        allowance = None
-
-    if status == "not_eligible" and eligibility.can_pay_missing_months_once:
-        warnings.append(
-            f"Thiếu {eligibility.months_short} tháng; cần cơ quan BHXH xác định quyền đóng một lần cho phần thiếu."
-        )
-
-    return PensionResponse(
-        calculation_id=calculation_id,
-        status=status,
-        error_code=error_code,
-        legal_rule_version=LEGAL_RULE_VERSION,
-        requested_pension_start_month=request.pension_start_month,
-        retirement_end_date=retirement_end,
-        normal_retirement_age_in_retirement_year=normal_age_label,
-        normal_retirement_threshold_date=normal_threshold,
-        earliest_normal_pension_start_month=format_year_month(earliest_normal_start),
-        history_validation=history,
-        contribution_summary=summary,
-        hazardous_summary=hazardous_summary,
-        early_retirement_policy_result=policy_result,
-        eligibility=eligibility,
-        average_basis=average_result,
-        basis_component_audit=basis_component_audit,
-        pension_rate=rate_result,
-        estimated_monthly_pension_vnd=estimated_pension,
-        pension_calculation_formula=pension_formula,
-        one_time_retirement_allowance_vnd=allowance,
-        minimum_floor_applied=floor_applied,
-        assumptions=assumptions,
+    warnings.append(
+        "Thời gian vượt được tính chính xác theo tháng, không làm tròn thành năm."
+    )
+    return OneTimeRetirementAllowance(
+        eligible=True,
+        threshold_months=threshold_months,
+        total_excess_months=total_excess,
+        excess_before_retirement_age_months=excess_before,
+        excess_after_retirement_age_months=excess_after,
+        standard_allowance_amount=float(standard_rounded),
+        post_retirement_allowance_amount=float(post_rounded),
+        total_allowance_amount=float(total_rounded),
+        average_basis=float(average.quantize(MONEY, rounding=ROUND_HALF_UP)),
         warnings=warnings,
-        audit_steps=audit,
-        legal_references=[LegalReference(**ref) for ref in LEGAL_REFERENCES],
     )
 
 
-def capabilities() -> CapabilitiesResponse:
-    return CapabilitiesResponse(
-        service="calculatePension",
-        version="2.3.0",
-        legal_rule_version=LEGAL_RULE_VERSION,
-        built_in_coefficient_years=[2026],
-        supported_retirement_cases=[
-            RetirementCase.normal,
-            RetirementCase.hazardous_or_special_region,
-            RetirementCase.underground_coal,
-            RetirementCase.reduced_capacity,
-            RetirementCase.policy_no_reduction,
-        ],
-        manual_review_cases=[RetirementCase.occupational_hiv, RetirementCase.armed_forces],
-        supported_source_documents=list(SourceDocumentType),
-        supported_early_retirement_policies=list(EarlyRetirementPolicyCode),
-        armed_forces_supported=False,
-        notes=[
-            "Mẫu 07/SBH có thể gửi theo thành phần; API cộng Mức đóng và 6 cột phụ cấp rồi quy đổi sang VND/tháng.",
-            "Bộ hệ số tích hợp sẵn chỉ áp dụng cho năm hưởng 2026.",
-            "Dòng ghi rõ không tham gia BHXH được tự động loại khỏi thời gian và mức bình quân.",
-            "Thời gian được công nhận trước 01/01/1995 nhưng không có lương/sinh hoạt phí dùng credited_duration_only: cộng thời gian, không tính bình quân.",
-            "Không loại toàn bộ thời gian trước 1995: tháng có đóng và có tiền lương vẫn xử lý theo chế độ tiền lương tương ứng.",
-            "Khoảng trống không có dòng trạng thái vẫn phải được xác nhận.",
-            "Nghề nặng nhọc chỉ được tính khi đối chiếu danh mục, ghi mã nghề và được người dùng xác nhận.",
-            "Hỗ trợ chính sách nghỉ hưu trước tuổi không giảm tỷ lệ theo NĐ 154/2025, NĐ 178/2024 sửa bởi NĐ 67/2025 và NĐ 177/2024 khi có quyết định của cấp có thẩm quyền.",
-            "Không hỗ trợ lực lượng vũ trang; trả manual_review cho armed_forces.",
-        ],
+def calculate(request: PensionCalculationRequest) -> PensionCalculationResponse:
+    diagnostics = validate_request(request)
+    if not diagnostics.response.validation:
+        fields = sorted(
+            {
+                field
+                for issue in diagnostics.issues
+                for field in issue.fields
+            }
+        )
+        detail = "; ".join(issue.message for issue in diagnostics.issues[:6])
+        if len(diagnostics.issues) > 6:
+            detail += f"; và {len(diagnostics.issues) - 6} lỗi khác."
+        raise BusinessError(
+            "CONTRIBUTION_HISTORY_INVALID",
+            detail,
+            fields,
+        )
+
+    records = expand_records(request)
+    eligibility = determine_eligibility(request, records)
+    average, average_warnings = calculate_average_salary(request, records)
+    before_rate, remainder_rate, after_rate = calculate_rate(
+        request.person.sex,
+        len(records),
+        eligibility.early_retirement_reduction,
+    )
+
+    estimated = (
+        average * after_rate / Decimal("100")
+    ).quantize(MONEY, rounding=ROUND_HALF_UP)
+    average_rounded = average.quantize(MONEY, rounding=ROUND_HALF_UP)
+    allowance = calculate_one_time_allowance(
+        request,
+        records,
+        average,
+        eligibility,
+    )
+
+    warnings = list(diagnostics.response.warnings)
+    warnings.extend(eligibility.warnings)
+    warnings.extend(average_warnings)
+    warnings.append(f"Phiên bản quy tắc: {LEGAL_RULE_VERSION}.")
+    warnings.append(DISCLAIMER)
+
+    return PensionCalculationResponse(
+        total_months=len(records),
+        average_salary=float(average_rounded),
+        replacement_rate=float(after_rate),
+        rate_before_early_reduction=float(before_rate),
+        contribution_month_remainder_rate=float(remainder_rate),
+        early_retirement_months=eligibility.early_retirement_months,
+        early_retirement_reduction=float(eligibility.early_retirement_reduction),
+        rate_after_reduction=float(after_rate),
+        estimated_pension=float(estimated),
+        warnings=warnings,
+        one_time_retirement_allowance=allowance,
     )

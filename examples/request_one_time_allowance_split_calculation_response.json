@@ -1,0 +1,31 @@
+{
+  "total_months": 372,
+  "average_salary": 24535484.0,
+  "replacement_rate": 75.0,
+  "rate_before_early_reduction": 75.0,
+  "contribution_month_remainder_rate": 0.0,
+  "early_retirement_months": 0,
+  "early_retirement_reduction": 0.0,
+  "rate_after_reduction": 75.0,
+  "estimated_pension": 18401613.0,
+  "warnings": [
+    "Phương pháp mức bình quân: Bình quân toàn bộ lương doanh nghiệp sau điều chỉnh.",
+    "Số tháng mức đóng trực tiếp dùng trong phép tính: 372; số tháng được quy đổi trọng số trong bình quân chung: 372.",
+    "Phiên bản quy tắc: VN-BHXH-41/2024-QH15@2025-07-01+DATA-2026+API-V67.4.1.",
+    "Đây là kết quả ước tính, không thay thế quyết định giải quyết chế độ của cơ quan BHXH."
+  ],
+  "one_time_retirement_allowance": {
+    "eligible": true,
+    "threshold_months": 360,
+    "total_excess_months": 12,
+    "excess_before_retirement_age_months": 5,
+    "excess_after_retirement_age_months": 7,
+    "standard_allowance_amount": 5111559.0,
+    "post_retirement_allowance_amount": 28624731.0,
+    "total_allowance_amount": 33736290.0,
+    "average_basis": 24535484.0,
+    "warnings": [
+      "Thời gian vượt được tính chính xác theo tháng, không làm tròn thành năm."
+    ]
+  }
+}

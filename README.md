@@ -1,153 +1,113 @@
-# calculatePension API v2.3.0
+# calculatePension API V67.4.1 — Deploy ngay
 
-# calculatePension API v2.3.0
+Bản nâng cấp đồng bộ payload với `SCHEMA_V67.4_Complete_OneTimeAllowance.json` và workflow `validateContributionHistory` → `calculatePension`.
 
-Phiên bản này giữ nguyên xác thực `X-API-Key` và bổ sung:
+## Điểm đã hoàn thiện
 
-- Ghi nhận ứng viên nghề nặng nhọc từ Mẫu 07/SBH.
-- Chỉ tính thời gian nghề nặng nhọc sau khi người dùng xác nhận đúng mã/tên nghề, điều kiện và giai đoạn.
-- Tổng hợp `hazardous_summary` và bảng kiểm toán các giai đoạn đã xác nhận.
-- Trường hợp `policy_no_reduction` cho nghỉ hưu trước tuổi không giảm tỷ lệ.
-- Hỗ trợ có điều kiện NĐ 154/2025, NĐ 178/2024 sửa bởi NĐ 67/2025, NĐ 177/2024 và văn bản khác do người dùng cung cấp.
-- Bắt buộc số/ngày quyết định của cấp có thẩm quyền.
-- Không hỗ trợ lực lượng vũ trang; `armed_forces` trả `manual_review`.
+- Request/response đúng hợp đồng V67.4.
+- Chỉ chấp nhận 4 `retirement_case`: `normal`, `hazardous_or_special_region`, `underground_coal`, `reduced_capacity`.
+- Kiểm tra tháng đảo, trùng/chồng, khoảng trống, dòng sau tháng hưởng, trạng thái tham gia và phương thức mức đóng.
+- Tách đúng thời gian trước 01/1995: vẫn cộng thời gian nhưng loại khỏi mức bình quân khi dùng `pre1995_policy`.
+- Loại `not_participating`/BHTN khỏi thời gian và mức bình quân.
+- Quy đổi Mẫu 07/SBH theo 7 thành phần; hệ số lương Nhà nước được nhân mức lương cơ sở/mức tham chiếu theo dữ liệu tích hợp.
+- Tính bình quân lương Nhà nước, doanh nghiệp, tự nguyện và quá trình hỗn hợp.
+- Tính tỷ lệ trước/sau giảm nghỉ trước tuổi.
+- Tính trợ cấp một lần theo số tháng vượt, tách:
+  - đến tháng đủ tuổi: `tháng vượt / 12 × 0,5 × mức bình quân`;
+  - sau tháng đủ tuổi và đủ điều kiện: `tháng vượt / 12 × 2 × mức bình quân`.
+- Không làm tròn thời gian vượt thành năm.
+- Chuẩn hóa lỗi HTTP thành `ErrorResponse`.
+- Xác thực `X-API-Key`.
+- Có 18 kiểm thử tích hợp.
 
-## Knowledge cần tải lên GPT
+## Giới hạn dữ liệu hiện tại
 
-- `Danh_muc_nghe_nang_nhoc_doc_hai_hien_hanh_2026.xlsx`
-- `DM_07_Chinh_sach_nghi_huu_truoc_tuoi_khong_giam_2026.xlsx`
-- Các tệp Knowledge v1.2 hiện có.
+Bộ hệ số điều chỉnh tích hợp chỉ dành cho `pension_start_month` thuộc năm **2026**. API trả validation=false nếu dùng năm khác để tránh áp dụng sai bảng hệ số.
 
-## Kiểm thử
+`retirement_policy=other_special_policy` chưa thể tự động hóa vì schema V67.4 không có trường quyết định/căn cứ chi tiết. `decree_154_streamlining` được xử lý theo lựa chọn đã xác nhận trong request và không giảm tỷ lệ.
 
-`37 passed`
+Với `hazardous_or_special_region` hoặc `underground_coal`, lựa chọn `retirement_case` được coi là đã có hồ sơ xác nhận điều kiện tương ứng; API vẫn trả cảnh báo.
 
-# calculatePension API v2.2
+## Triển khai Render
 
-API FastAPI kiểm tra dữ liệu Mẫu 07/SBH và dự tính lương hưu BHXH Việt Nam.
+1. Giải nén gói và đưa thư mục này lên GitHub.
+2. Trên Render, tạo **Blueprint** từ repository; `render.yaml` đã cấu hình sẵn.
+3. Thiết lập biến môi trường:
+   - `API_KEY`: khóa bí mật dài, ngẫu nhiên;
+   - `REQUIRE_API_KEY=true`;
+   - `AUTH_DIAGNOSTICS_ENABLED=false`.
+4. Deploy và kiểm tra:
+   - `GET /health`
+   - `GET /docs`
 
-## Thay đổi chính của v2.2
+Build command:
 
-### 1. Tính tổng hệ số/mức đóng từ Mẫu 07/SBH
+```bash
+pip install -r requirements.txt
+```
 
-Khi dữ liệu được đọc theo các cột của Mẫu 07/SBH, API áp dụng:
+Start command:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+## Triển khai Docker
+
+```bash
+docker build -t calculatepension:v67.4.1 .
+docker run --rm -p 8000:8000 \
+  -e API_KEY='replace-with-secret' \
+  -e REQUIRE_API_KEY=true \
+  calculatepension:v67.4.1
+```
+
+## Cấu hình GPT Action
+
+Dùng file:
 
 ```text
-Tổng hệ số/mức đóng
-= Mức đóng
-+ Chức vụ
-+ TN VK
-+ TN Nghề
-+ Khu vực
-+ Khác
-+ Tái cử
+SCHEMA_V67.4.1_Deploy.json
 ```
 
-Ô trống được tính bằng 0. Tất cả thành phần phải cùng đơn vị:
-
-- `coefficient`: tổng hệ số được nhân với lương cơ sở để quy đổi sang VND/tháng;
-- `vnd`: các thành phần được cộng trực tiếp thành VND/tháng.
-
-Dữ liệu gửi bằng:
-
-```json
-{
-  "basis_input_type": "mau_07_sbh_components",
-  "sbh_components": {
-    "unit": "coefficient",
-    "base_value": 6.1,
-    "position_allowance": 0.3,
-    "seniority_beyond_frame_allowance": 0,
-    "professional_seniority_allowance": 0,
-    "regional_allowance": 0,
-    "other_allowance": 0,
-    "reelection_allowance": 0,
-    "base_salary_vnd_override": 2530000
-  }
-}
-```
-
-Không gửi đồng thời `monthly_basis_vnd` và `sbh_components`, nhằm tránh cộng hai lần.
-
-### 2. Bảng kiểm toán thành phần
-
-Kết quả có `basis_component_audit`, thể hiện:
-
-- Mức đóng gốc;
-- từng loại phụ cấp;
-- tổng phụ cấp;
-- tổng hệ số/mức đóng;
-- lương cơ sở dùng quy đổi;
-- mức đóng VND/tháng;
-- công thức tiếng Việt.
-
-### 3. Giữ nguyên quy tắc v2.1
-
-- `contributed`: tính thời gian và mức bình quân;
-- `credited_duration_only`: chỉ cộng thời gian trước 01/01/1995 khi có căn cứ không hưởng lương/sinh hoạt phí;
-- `not_participating`: loại khỏi thời gian và bình quân;
-- trả mức bình quân trước khi nhân tỷ lệ hưởng.
-
-## Endpoint
-
-- `GET /health`
-- `GET /v1/capabilities`
-- `POST /v1/validateContributionHistory`
-- `POST /v1/calculatePension`
-
-## Cài đặt Windows
-
-```powershell
-py -3.14 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
-```
-
-Mở `http://127.0.0.1:8000/docs`.
-
-## Custom GPT
-
-1. Dán `gpt-instructions.txt` vào Instructions.
-2. Tải Knowledge Pack v1.2.
-3. Nhập `openapi-gpt-action.yaml`.
-4. Authentication: API Key, custom header `X-API-Key`.
-5. Thay `https://YOUR_PUBLIC_HTTPS_DOMAIN` bằng URL Render thật.
-
-Kết quả là ước tính; hồ sơ do cơ quan BHXH xác nhận và quy định có hiệu lực tại thời điểm giải quyết là căn cứ cuối cùng.
-
-
-## Xác thực GPT Action — bản hoàn thiện v2.2.0
-
-API chỉ sử dụng:
-
-```http
-X-API-Key: <API_KEY>
-```
-
-Không sử dụng Bearer.
-
-Biến Render bắt buộc:
+Authentication:
 
 ```text
-API_KEY=<khóa bí mật>
-REQUIRE_API_KEY=true
-AUTH_DIAGNOSTICS_ENABLED=false
-```
-
-Khi cần chẩn đoán, tạm đặt `AUTH_DIAGNOSTICS_ENABLED=true`, chọn **Save and deploy**, rồi dùng:
-
-- `openapi-auth-diagnostic-xapikey.yaml` trong GPT Action; hoặc
-- `test-auth-v220-xapikey.ps1` trên Windows.
-
-Endpoint `/v1/authDiagnostics` chỉ trả độ dài, fingerprint rút gọn và kết quả so khớp; không trả khóa bí mật. Sau khi sửa xong, đặt lại `AUTH_DIAGNOSTICS_ENABLED=false`.
-
-Để tránh GPT giữ cấu hình secret cũ, nên xóa Action cũ và tạo một Action mới hoàn toàn:
-
-```text
-Authentication: API Key
-Type: Custom header
+Type: API Key
+Auth type: Custom header
 Header: X-API-Key
-Secret: chỉ nhập giá trị API_KEY
+Secret: cùng giá trị API_KEY trên Render
 ```
+
+Luồng gọi bắt buộc:
+
+1. `validateContributionHistory`
+2. Chỉ khi `validation=true`, gọi `calculatePension`
+
+## Chạy kiểm thử
+
+```bash
+python -m pytest -q -p no:cacheprovider
+```
+
+## Ví dụ
+
+- `examples/request_normal.json`
+- `examples/request_normal_validation_response.json`
+- `examples/request_normal_calculation_response.json`
+- `examples/request_one_time_allowance_split.json`
+- `examples/request_one_time_allowance_split_validation_response.json`
+- `examples/request_one_time_allowance_split_calculation_response.json`
+
+## Dữ liệu tích hợp
+
+- `data/base_salary_timeline.json`
+- `data/adjustment_coefficients_2026.json`
+- `data/retirement_age_schedule.json`
+- `data/state_average_windows.json`
+
+Các tệp JSON này được chuẩn hóa từ bộ danh mục Excel đính kèm để runtime không phải cài thư viện xử lý Excel.
+
+## Tuyên bố
+
+Đây là kết quả ước tính, không thay thế quyết định giải quyết chế độ của cơ quan BHXH.

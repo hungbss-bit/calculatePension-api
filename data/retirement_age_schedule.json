@@ -1,0 +1,129 @@
+{
+  "source_file": "DM_03_Tra_cuu_tuoi_nghi_huu.xlsx",
+  "schedule": {
+    "male": {
+      "2021": {
+        "years": 60,
+        "months": 3
+      },
+      "2022": {
+        "years": 60,
+        "months": 6
+      },
+      "2023": {
+        "years": 60,
+        "months": 9
+      },
+      "2024": {
+        "years": 61,
+        "months": 0
+      },
+      "2025": {
+        "years": 61,
+        "months": 3
+      },
+      "2026": {
+        "years": 61,
+        "months": 6
+      },
+      "2027": {
+        "years": 61,
+        "months": 9
+      },
+      "2028": {
+        "years": 62,
+        "months": 0
+      },
+      "2029": {
+        "years": 62,
+        "months": 0
+      },
+      "2030": {
+        "years": 62,
+        "months": 0
+      },
+      "2031": {
+        "years": 62,
+        "months": 0
+      },
+      "2032": {
+        "years": 62,
+        "months": 0
+      },
+      "2033": {
+        "years": 62,
+        "months": 0
+      },
+      "2034": {
+        "years": 62,
+        "months": 0
+      },
+      "2035": {
+        "years": 62,
+        "months": 0
+      }
+    },
+    "female": {
+      "2021": {
+        "years": 55,
+        "months": 4
+      },
+      "2022": {
+        "years": 55,
+        "months": 8
+      },
+      "2023": {
+        "years": 56,
+        "months": 0
+      },
+      "2024": {
+        "years": 56,
+        "months": 4
+      },
+      "2025": {
+        "years": 56,
+        "months": 8
+      },
+      "2026": {
+        "years": 57,
+        "months": 0
+      },
+      "2027": {
+        "years": 57,
+        "months": 4
+      },
+      "2028": {
+        "years": 57,
+        "months": 8
+      },
+      "2029": {
+        "years": 58,
+        "months": 0
+      },
+      "2030": {
+        "years": 58,
+        "months": 4
+      },
+      "2031": {
+        "years": 58,
+        "months": 8
+      },
+      "2032": {
+        "years": 59,
+        "months": 0
+      },
+      "2033": {
+        "years": 59,
+        "months": 4
+      },
+      "2034": {
+        "years": 59,
+        "months": 8
+      },
+      "2035": {
+        "years": 60,
+        "months": 0
+      }
+    }
+  }
+}

@@ -1,35 +1,30 @@
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI, Header
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+
 from .auth import get_auth_diagnostics, verify_api_key
-from .engine import calculate_pension, capabilities, validate_contribution_history
+from .engine import BusinessError, calculate, validate_request
 from .models import (
-    CapabilitiesResponse,
-    HistoryValidationResult,
-    PensionRequest,
-    PensionResponse,
+    ErrorResponse,
+    PensionCalculationRequest,
+    PensionCalculationResponse,
+    ValidationResponse,
 )
 from .privacy_vi import get_privacy_policy_html
 from .swagger_vi import get_swagger_ui_vi_html
 
-OPENAPI_TAGS = [
-    {"name": "Hệ thống", "description": "Trạng thái và khả năng của dịch vụ."},
-    {"name": "Kiểm tra hồ sơ", "description": "Kiểm tra dữ liệu chuẩn hóa từ Mẫu 07/SBH."},
-    {"name": "Tính lương hưu", "description": "Dự tính điều kiện và mức lương hưu."},
-]
+API_VERSION = "67.4.1"
 
 app = FastAPI(
-    title="API calculatePension - Tính lương hưu BHXH",
-    version="2.3.0",
+    title="calculatePension API",
+    version=API_VERSION,
     description=(
-        "API dự tính lương hưu BHXH Việt Nam, hỗ trợ dữ liệu chuẩn hóa từ Mẫu 07/SBH, "
-        "kiểm tra tháng trống/trùng, trạng thái không tham gia, thời gian chỉ cộng thời gian, tổng hợp Mức đóng và 6 cột phụ cấp của Mẫu 07/SBH, quá trình hỗn hợp và bộ hệ số theo năm hưởng. "
-        "Hỗ trợ xác nhận nghề nặng nhọc và chính sách nghỉ trước tuổi không giảm tỷ lệ; không áp dụng cho lực lượng vũ trang. Kết quả chỉ mang tính tham khảo."
+        "API dự tính lương hưu BHXH Việt Nam, đồng bộ schema V67.4, "
+        "bao gồm trợ cấp một lần khi nghỉ hưu. Kết quả chỉ mang tính ước tính."
     ),
-    contact={"name": "Quản trị viên calculatePension"},
-    openapi_tags=OPENAPI_TAGS,
     docs_url=None,
     redoc_url=None,
 )
@@ -49,7 +44,7 @@ def docs_vi():
 def docs_en():
     return get_swagger_ui_html(
         openapi_url=app.openapi_url,
-        title=f"{app.title} - English Swagger UI",
+        title=f"{app.title} - Swagger UI",
         swagger_ui_parameters={
             "deepLinking": True,
             "displayRequestDuration": True,
@@ -64,88 +59,127 @@ def privacy_policy() -> HTMLResponse:
     return HTMLResponse(content=get_privacy_policy_html())
 
 
-@app.get(
-    "/health",
-    tags=["Hệ thống"],
-    summary="Kiểm tra trạng thái API",
-)
+@app.get("/health", include_in_schema=False)
 def health() -> dict[str, str]:
-    return {"status": "ok", "service": "calculatePension", "version": "2.3.0"}
+    return {
+        "status": "ok",
+        "service": "calculatePension",
+        "version": API_VERSION,
+        "schema_version": "67.4",
+    }
 
 
-@app.get(
-    "/v1/authDiagnostics",
-    operation_id="checkApiKeyDiagnostics",
-    tags=["Hệ thống"],
-    summary="Chẩn đoán header X-API-Key an toàn",
-    description=(
-        "Chỉ hoạt động khi AUTH_DIAGNOSTICS_ENABLED=true. "
-        "Không trả khóa bí mật; chỉ trả độ dài, dấu vân tay SHA-256 rút gọn "
-        "và kết quả so khớp để chẩn đoán cấu hình Render/GPT."
-    ),
-)
+@app.get("/v1/authDiagnostics", include_in_schema=False)
 def auth_diagnostics(
-    x_api_key: str | None = Header(
-        default=None,
-        alias="X-API-Key",
-        include_in_schema=False,
-    ),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
 ) -> dict[str, object]:
     return get_auth_diagnostics(x_api_key)
-
-
-@app.get(
-    "/v1/capabilities",
-    operation_id="getPensionCapabilities",
-    response_model=CapabilitiesResponse,
-    tags=["Hệ thống"],
-    summary="Xem phạm vi tính toán hiện được hỗ trợ",
-    dependencies=[Depends(verify_api_key)],
-)
-def get_capabilities() -> CapabilitiesResponse:
-    return capabilities()
 
 
 @app.post(
     "/v1/validateContributionHistory",
     operation_id="validateContributionHistory",
-    response_model=HistoryValidationResult,
-    tags=["Kiểm tra hồ sơ"],
-    summary="Kiểm tra dữ liệu quá trình BHXH trước khi tính",
-    description=(
-        "Kiểm tra xác nhận Mẫu 07/SBH, đơn vị mức đóng, tháng trống, tháng trùng "
-        "và giai đoạn sau tháng bắt đầu hưởng."
-    ),
+    response_model=ValidationResponse,
+    responses={400: {"model": ErrorResponse}},
     dependencies=[Depends(verify_api_key)],
+    summary="Kiểm tra và chuẩn hóa lịch sử đóng BHXH",
 )
-def validate_history(request: PensionRequest) -> HistoryValidationResult:
-    return validate_contribution_history(request)
+def validate_history(
+    request: PensionCalculationRequest,
+) -> ValidationResponse:
+    return validate_request(request).response
 
 
 @app.post(
     "/v1/calculatePension",
     operation_id="calculatePension",
-    response_model=PensionResponse,
-    tags=["Tính lương hưu"],
-    summary="Dự tính mức lương hưu",
-    description=(
-        "Tính điều kiện hưởng, mức bình quân, tỷ lệ, giảm do nghỉ trước tuổi, "
-        "lương hưu dự tính và trợ cấp một lần. Dữ liệu Mẫu 07/SBH phải được "
-        "chuẩn hóa và xác nhận trước."
-    ),
+    response_model=PensionCalculationResponse,
+    response_model_exclude_none=True,
+    responses={400: {"model": ErrorResponse}},
     dependencies=[Depends(verify_api_key)],
+    summary="Tính dự tính lương hưu và trợ cấp một lần",
 )
-def calculate(request: PensionRequest) -> PensionResponse:
-    return calculate_pension(request)
+def calculate_pension(
+    request: PensionCalculationRequest,
+) -> PensionCalculationResponse:
+    return calculate(request)
+
+
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(
+    _: Request,
+    exc: HTTPException,
+) -> JSONResponse:
+    if isinstance(exc.detail, dict):
+        error_code = str(exc.detail.get("error_code", f"HTTP_{exc.status_code}"))
+        detail = str(
+            exc.detail.get("detail")
+            or exc.detail.get("message_vi")
+            or "Yêu cầu HTTP không hợp lệ."
+        )
+        fields = list(exc.detail.get("fields", []))
+    else:
+        error_code = f"HTTP_{exc.status_code}"
+        detail = str(exc.detail)
+        fields = []
+    payload = ErrorResponse(
+        error_code=error_code,
+        detail=detail,
+        fields=fields,
+    )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=payload.model_dump(mode="json"),
+        headers=exc.headers,
+    )
+
+
+@app.exception_handler(BusinessError)
+async def business_error_handler(
+    _: Request,
+    exc: BusinessError,
+) -> JSONResponse:
+    payload = ErrorResponse(
+        error_code=exc.error_code,
+        detail=exc.detail,
+        fields=exc.fields,
+    )
+    return JSONResponse(status_code=400, content=payload.model_dump(mode="json"))
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error_handler(
+    _: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    fields: list[str] = []
+    details: list[str] = []
+    for error in exc.errors():
+        loc = ".".join(str(item) for item in error.get("loc", ()) if item != "body")
+        if loc:
+            fields.append(loc)
+        details.append(f"{loc or 'request'}: {error.get('msg', 'Dữ liệu không hợp lệ')}")
+    payload = ErrorResponse(
+        error_code="REQUEST_VALIDATION_ERROR",
+        detail="; ".join(details),
+        fields=sorted(set(fields)),
+    )
+    return JSONResponse(status_code=400, content=payload.model_dump(mode="json"))
 
 
 @app.exception_handler(Exception)
-async def unhandled_exception_handler(_, exc: Exception) -> JSONResponse:
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error_code": "INTERNAL_CALCULATION_ERROR",
-            "message_vi": "Đã xảy ra lỗi nội bộ trong quá trình tính toán.",
-            "error_type": type(exc).__name__,
-        },
+async def unhandled_exception_handler(
+    _: Request,
+    exc: Exception,
+) -> JSONResponse:
+    payload = ErrorResponse(
+        error_code="INTERNAL_CALCULATION_ERROR",
+        detail=(
+            "Đã xảy ra lỗi nội bộ trong quá trình tính toán. "
+            f"Loại lỗi: {type(exc).__name__}."
+        ),
+        fields=[],
     )
+    return JSONResponse(status_code=500, content=payload.model_dump(mode="json"))
