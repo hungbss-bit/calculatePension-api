@@ -1,0 +1,479 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "calculatePension API",
+    "description": "API dự tính lương hưu BHXH Việt Nam. Kết quả chỉ mang tính ước tính, không thay thế quyết định giải quyết chế độ của cơ quan BHXH có thẩm quyền.",
+    "version": "67.6"
+  },
+  "servers": [
+    {
+      "url": "https://calculatepension-api.onrender.com"
+    }
+  ],
+  "paths": {
+    "/v1/validateContributionHistory": {
+      "post": {
+        "operationId": "validateContributionHistory",
+        "summary": "Kiểm tra và chuẩn hóa lịch sử đóng BHXH",
+        "description": "Kiểm tra dữ liệu trước khi tính lương hưu. Phải gọi operation này trước calculatePension. Chỉ được gọi calculatePension khi validation=true.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PensionCalculationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid contribution history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/calculatePension": {
+      "post": {
+        "operationId": "calculatePension",
+        "summary": "Tính dự tính lương hưu",
+        "description": "Chỉ gọi sau khi validateContributionHistory trả validation=true. Không gọi với contributions rỗng.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PensionCalculationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pension calculation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PensionCalculationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Calculation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PensionCalculationRequest": {
+        "type": "object",
+        "required": [
+          "person",
+          "pension_start_month",
+          "retirement_case",
+          "contributions"
+        ],
+        "properties": {
+          "person": {
+            "$ref": "#/components/schemas/Person"
+          },
+          "pension_start_month": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}$",
+            "description": "Tháng bắt đầu hưởng lương hưu, định dạng YYYY-MM."
+          },
+          "retirement_case": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "hazardous_or_special_region",
+              "underground_coal",
+              "reduced_capacity"
+            ],
+            "description": "Loại trường hợp nghỉ hưu."
+          },
+          "retirement_policy": {
+            "type": "string",
+            "enum": [
+              "none",
+              "decree_154_streamlining",
+              "other_special_policy"
+            ],
+            "default": "none"
+          },
+          "impairment_percent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "contributions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/Contribution"
+            }
+          },
+          "retirement_age_eligible_month": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}$",
+            "description": "Tháng người lao động đủ tuổi nghỉ hưu để phân tách thời gian vượt trước và sau tuổi nghỉ hưu."
+          },
+          "benefit_calculation_scope": {
+            "type": "string",
+            "enum": [
+              "pension_only",
+              "pension_and_one_time_allowance"
+            ],
+            "default": "pension_and_one_time_allowance",
+            "description": "Phạm vi tính: lương hưu hoặc lương hưu kèm trợ cấp một lần khi nghỉ hưu."
+          }
+        }
+      },
+      "Person": {
+        "type": "object",
+        "required": [
+          "date_of_birth",
+          "sex"
+        ],
+        "properties": {
+          "date_of_birth": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "sex": {
+            "type": "string",
+            "enum": [
+              "male",
+              "female"
+            ]
+          }
+        }
+      },
+      "Contribution": {
+        "type": "object",
+        "required": [
+          "from_month",
+          "to_month",
+          "participation_status"
+        ],
+        "properties": {
+          "from_month": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}$"
+          },
+          "to_month": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}$"
+          },
+          "participation_status": {
+            "type": "string",
+            "enum": [
+              "contributed",
+              "credited_duration_only",
+              "not_participating"
+            ]
+          },
+          "duration_only_reason": {
+            "type": "string",
+            "enum": [
+              "pre1995_no_salary_or_living_allowance"
+            ]
+          },
+          "contribution_type": {
+            "type": "string",
+            "enum": [
+              "compulsory_state",
+              "compulsory_employer",
+              "voluntary"
+            ]
+          },
+          "basis_input_type": {
+            "type": "string",
+            "enum": [
+              "mau_07_sbh_components",
+              "monthly_basis_vnd"
+            ]
+          },
+          "monthly_basis_vnd": {
+            "type": "number",
+            "minimum": 0
+          },
+          "sbh_components": {
+            "$ref": "#/components/schemas/SBHComponents"
+          },
+          "average_inclusion": {
+            "type": "string",
+            "enum": [
+              "included",
+              "excluded"
+            ],
+            "description": "Kiểm soát việc đưa giai đoạn vào tính mức bình quân. excluded dùng cho thời gian trước 01/01/1995 theo chính sách xử lý mức bình quân."
+          },
+          "average_exclusion_reason": {
+            "type": "string",
+            "enum": [
+              "pre1995_policy"
+            ],
+            "description": "Lý do loại khỏi tính bình quân nhưng vẫn tính thời gian tham gia BHXH."
+          },
+          "after_retirement_age_period": {
+            "type": "boolean",
+            "default": false,
+            "description": "Đánh dấu thời gian đóng phát sinh sau tháng đủ tuổi nghỉ hưu để tính phần trợ cấp một lần theo mức áp dụng cho thời gian tiếp tục đóng."
+          }
+        }
+      },
+      "SBHComponents": {
+        "type": "object",
+        "required": [
+          "unit",
+          "base_value"
+        ],
+        "properties": {
+          "unit": {
+            "type": "string",
+            "enum": [
+              "coefficient",
+              "vnd"
+            ],
+            "description": "Đơn vị chung của toàn bộ thành phần. coefficient dùng cho hệ số; vnd dùng cho mức tiền trực tiếp."
+          },
+          "base_value": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Cột Mức đóng trong Mẫu 07/SBH."
+          },
+          "position_allowance": {
+            "type": "number",
+            "minimum": 0,
+            "default": 0
+          },
+          "seniority_beyond_frame_allowance": {
+            "type": "number",
+            "minimum": 0,
+            "default": 0,
+            "description": "Phụ cấp thâm niên vượt khung."
+          },
+          "professional_seniority_allowance": {
+            "type": "number",
+            "minimum": 0,
+            "default": 0,
+            "description": "Phụ cấp thâm niên nghề."
+          },
+          "regional_allowance": {
+            "type": "number",
+            "minimum": 0,
+            "default": 0
+          },
+          "other_allowance": {
+            "type": "number",
+            "minimum": 0,
+            "default": 0
+          },
+          "reelection_allowance": {
+            "type": "number",
+            "minimum": 0,
+            "default": 0
+          }
+        }
+      },
+      "ValidationResponse": {
+        "type": "object",
+        "required": [
+          "validation"
+        ],
+        "properties": {
+          "validation": {
+            "type": "boolean"
+          },
+          "normalized_summary": {
+            "type": "object",
+            "properties": {
+              "total_contribution_months": {
+                "type": "integer",
+                "description": "Tổng số tháng BHXH hợp lệ dùng tính."
+              },
+              "excluded_bhtn_months": {
+                "type": "integer",
+                "description": "Số tháng BHTN đã loại khỏi dữ liệu tính."
+              },
+              "contribution_count": {
+                "type": "integer",
+                "description": "Số giai đoạn đã chuẩn hóa."
+              }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PensionCalculationResponse": {
+        "type": "object",
+        "required": [
+          "total_months",
+          "estimated_pension"
+        ],
+        "properties": {
+          "total_months": {
+            "type": "integer",
+            "description": "Tổng thời gian đóng BHXH tính theo tháng."
+          },
+          "average_salary": {
+            "type": "number",
+            "description": "Mức bình quân tiền lương tháng đóng BHXH."
+          },
+          "replacement_rate": {
+            "type": "number",
+            "description": "Tỷ lệ hưởng."
+          },
+          "rate_before_early_reduction": {
+            "type": "number",
+            "description": "Tỷ lệ trước giảm nghỉ trước tuổi."
+          },
+          "contribution_month_remainder_rate": {
+            "type": "number",
+            "description": "Phần tỷ lệ cộng thêm do tháng lẻ đóng BHXH."
+          },
+          "early_retirement_months": {
+            "type": "integer",
+            "description": "Số tháng nghỉ trước tuổi."
+          },
+          "early_retirement_reduction": {
+            "type": "number",
+            "description": "Mức giảm do nghỉ trước tuổi."
+          },
+          "rate_after_reduction": {
+            "type": "number",
+            "description": "Tỷ lệ hưởng cuối cùng."
+          },
+          "estimated_pension": {
+            "type": "number",
+            "description": "Mức lương hưu dự tính hàng tháng."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "one_time_retirement_allowance": {
+            "type": "object",
+            "description": "Kết quả trợ cấp một lần khi nghỉ hưu.",
+            "properties": {
+              "eligible": {
+                "type": "boolean"
+              },
+              "threshold_months": {
+                "type": "integer"
+              },
+              "total_excess_months": {
+                "type": "integer"
+              },
+              "excess_before_retirement_age_months": {
+                "type": "integer"
+              },
+              "excess_after_retirement_age_months": {
+                "type": "integer"
+              },
+              "standard_allowance_amount": {
+                "type": "number"
+              },
+              "post_retirement_allowance_amount": {
+                "type": "number"
+              },
+              "total_allowance_amount": {
+                "type": "number"
+              },
+              "average_basis": {
+                "type": "number"
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "eligible",
+              "total_allowance_amount"
+            ]
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "error_code",
+          "detail"
+        ],
+        "properties": {
+          "error_code": {
+            "type": "string",
+            "description": "Mã lỗi nghiệp vụ hoặc kỹ thuật."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Mô tả chi tiết lỗi."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Danh sách trường dữ liệu cần sửa."
+          }
+        }
+      }
+    }
+  },
+  "x-validation-rules": {
+    "contribution_basis_rule": "Mỗi giai đoạn participation_status=contributed phải có đúng một phương thức nhập mức đóng: monthly_basis_vnd hoặc sbh_components.",
+    "no_mixed_basis_rule": "Không cho phép đồng thời monthly_basis_vnd và sbh_components trong cùng một contribution.",
+    "bhtn_rule": "Các dòng có nội dung BHTN hoặc ĐÓNG BẢO HIỂM THẤT NGHIỆP phải được chuẩn hóa participation_status=not_participating và không được sử dụng để tính lương hưu.",
+    "credited_duration_rule": "credited_duration_only chỉ hợp lệ khi thời gian trước 01/01/1995, có căn cứ công nhận và không hưởng tiền lương hoặc sinh hoạt phí.",
+    "action_sequence_rule": "calculatePension chỉ hợp lệ sau khi validateContributionHistory trả validation=true.",
+    "retirement_policy_rule": "retirement_policy chỉ cung cấp thông tin căn cứ chính sách. Không tự quyết định có giảm trừ hay không, mức giảm trừ hoặc điều kiện hưởng. Việc áp dụng chính sách do backend xử lý.",
+    "pre1995_average_rule": "Thời gian tham gia BHXH trước 01/01/1995 được tính vào tổng thời gian đóng để xác định tỷ lệ hưởng lương hưu và trợ cấp một lần. Không đưa mức tiền lương trước 01/01/1995 vào tính bình quân tiền lương. Mức bình quân tính từ năm 1995 trở đi theo số tháng bình quân tương ứng quy định.",
+    "pre1995_schema_rule": "Không dùng tiền lương giai đoạn trước 01/01/1995 để tính average_salary. credited_duration_only chỉ dùng khi có căn cứ không hưởng lương hoặc sinh hoạt phí.",
+    "pre1995_contributed_priority_rule": "Nếu hồ sơ BHXH xác nhận thời gian tham gia BHXH trước 01/01/1995 thì giữ contributed, tính thời gian; không tự chuyển credited_duration_only.",
+    "pre1995_no_basis_required_rule": "Giai đoạn trước 01/01/1995 đã xác nhận tham gia BHXH không bắt buộc có monthly_basis_vnd hoặc sbh_components để tính bình quân.",
+    "state_salary_average_rule": "Đối với lương Nhà nước theo hệ số, không lấy trung bình hệ số; phải quy đổi từng tháng: hệ số căn cứ đóng nhân mức lương cơ sở/mức tham chiếu rồi mới tính bình quân.",
+    "pre1995_duration_only_reason_restriction": "Không sử dụng duration_only_reason=pre1995_no_salary_or_living_allowance nếu người lao động thực tế tham gia BHXH.",
+    "one_time_allowance_rule": "Trợ cấp một lần khi nghỉ hưu xác định trên tổng thời gian đóng BHXH vượt ngưỡng. Thời gian trước 01/01/1995 được dùng xác định tổng thời gian nhưng không dùng mức lương trước 1995 để tính bình quân.",
+    "retirement_case_rule": "Chỉ sử dụng normal, hazardous_or_special_region, underground_coal, reduced_capacity. Không tạo early_retirement.",
+    "one_time_allowance_split_rule": "Trợ cấp một lần phải tách phần đóng vượt đến tuổi nghỉ hưu và phần tiếp tục đóng sau tuổi nghỉ hưu.",
+    "one_time_allowance_threshold_rule": "Nữ trên 360 tháng hoặc nam trên 420 tháng mới phát sinh trợ cấp một lần khi nghỉ hưu."
+  }
+}
