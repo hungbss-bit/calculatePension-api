@@ -59,7 +59,7 @@ def privacy_policy() -> HTMLResponse:
     return HTMLResponse(content=get_privacy_policy_html())
 
 
-@app.get("/health", include_in_schema=False)
+@app.get("/health", operation_id="checkPensionApiHealth", summary="Kiểm tra trạng thái API")
 def health() -> dict[str, str]:
     return {
         "status": "ok",
@@ -67,6 +67,30 @@ def health() -> dict[str, str]:
         "version": API_VERSION,
         "schema_version": "67.4",
     }
+
+
+@app.get(
+    "/v1/capabilities",
+    operation_id="getPensionCapabilities",
+    summary="Thông tin khả năng hỗ trợ của API",
+)
+def pension_capabilities() -> dict[str, object]:
+    return {
+        "api_version": API_VERSION,
+        "schema_version": "67.4",
+        "actions": [
+            "checkPensionApiHealth",
+            "getPensionCapabilities",
+            "validateContributionHistory",
+            "calculatePension",
+        ],
+        "supported": {
+            "validation": True,
+            "pension_calculation": True,
+            "one_time_allowance": True,
+        },
+    }
+
 
 
 @app.get("/v1/authDiagnostics", include_in_schema=False)
