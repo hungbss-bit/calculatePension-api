@@ -1,0 +1,32 @@
+{
+  "identity":{"so_bhxh":"2196008859"},
+  "person":{"date_of_birth":"1965-01-12","sex":"male"},
+  "pension_start_month":"2026-08",
+  "retirement_case":"normal",
+  "contributions":[
+    {"from_month":"1992-11","to_month":"1992-12","participation_status":"contributed","contribution_type":"compulsory_state","basis_input_type":"mau_07_sbh_components","sbh_components":{"unit":"coefficient","base_value":262},"average_inclusion":"excluded","average_exclusion_reason":"pre1995_policy"},
+    {"from_month":"1993-01","to_month":"1993-11","participation_status":"contributed","contribution_type":"compulsory_state","basis_input_type":"mau_07_sbh_components","sbh_components":{"unit":"coefficient","base_value":1.35},"average_inclusion":"excluded","average_exclusion_reason":"pre1995_policy"},
+    {"from_month":"1993-12","to_month":"1994-12","participation_status":"contributed","contribution_type":"compulsory_state","basis_input_type":"mau_07_sbh_components","sbh_components":{"unit":"coefficient","base_value":1.47},"average_inclusion":"excluded","average_exclusion_reason":"pre1995_policy"},
+    {"from_month":"1995-01","to_month":"1996-06","participation_status":"contributed","contribution_type":"compulsory_state","basis_input_type":"mau_07_sbh_components","sbh_components":{"unit":"coefficient","base_value":1.62}},
+    {"from_month":"1996-07","to_month":"1999-11","participation_status":"contributed","contribution_type":"compulsory_state","basis_input_type":"mau_07_sbh_components","sbh_components":{"unit":"coefficient","base_value":1.62}},
+    {"from_month":"1999-12","to_month":"1999-12","participation_status":"contributed","contribution_type":"compulsory_state","basis_input_type":"mau_07_sbh_components","sbh_components":{"unit":"coefficient","base_value":1.78}},
+    {"from_month":"2000-01","to_month":"2002-12","participation_status":"contributed","contribution_type":"compulsory_state","basis_input_type":"mau_07_sbh_components","sbh_components":{"unit":"coefficient","base_value":1.78}},
+    {"from_month":"2003-01","to_month":"2004-09","participation_status":"contributed","contribution_type":"compulsory_state","basis_input_type":"mau_07_sbh_components","sbh_components":{"unit":"coefficient","base_value":1.78}},
+    {"from_month":"2004-10","to_month":"2004-11","participation_status":"contributed","contribution_type":"compulsory_state","basis_input_type":"mau_07_sbh_components","sbh_components":{"unit":"coefficient","base_value":2.55}},
+    {"from_month":"2004-12","to_month":"2007-12","participation_status":"contributed","contribution_type":"compulsory_state","basis_input_type":"mau_07_sbh_components","sbh_components":{"unit":"coefficient","base_value":3.01}},
+    {"from_month":"2008-01","to_month":"2008-11","participation_status":"contributed","contribution_type":"compulsory_state","basis_input_type":"mau_07_sbh_components","sbh_components":{"unit":"coefficient","base_value":3.01}},
+    {"from_month":"2008-12","to_month":"2009-11","participation_status":"contributed","contribution_type":"compulsory_state","basis_input_type":"mau_07_sbh_components","sbh_components":{"unit":"coefficient","base_value":3.01}},
+    {"from_month":"2009-12","to_month":"2009-12","participation_status":"not_participating","contribution_type":null},
+    {"from_month":"2010-01","to_month":"2010-11","participation_status":"contributed","contribution_type":"compulsory_state","basis_input_type":"mau_07_sbh_components","sbh_components":{"unit":"coefficient","base_value":3.01}},
+    {"from_month":"2010-12","to_month":"2015-12","participation_status":"contributed","contribution_type":"compulsory_state","basis_input_type":"mau_07_sbh_components","sbh_components":{"unit":"coefficient","base_value":3.56}},
+    {"from_month":"2016-01","to_month":"2016-03","participation_status":"contributed","contribution_type":"compulsory_employer","basis_input_type":"monthly_basis_vnd","monthly_basis_vnd":4094000},
+    {"from_month":"2016-04","to_month":"2016-11","participation_status":"contributed","contribution_type":"compulsory_employer","basis_input_type":"monthly_basis_vnd","monthly_basis_vnd":4131000},
+    {"from_month":"2016-12","to_month":"2017-03","participation_status":"contributed","contribution_type":"compulsory_employer","basis_input_type":"monthly_basis_vnd","monthly_basis_vnd":4428000},
+    {"from_month":"2017-04","to_month":"2017-12","participation_status":"contributed","contribution_type":"compulsory_employer","basis_input_type":"monthly_basis_vnd","monthly_basis_vnd":4644000},
+    {"from_month":"2018-01","to_month":"2019-08","participation_status":"contributed","contribution_type":"compulsory_employer","basis_input_type":"monthly_basis_vnd","monthly_basis_vnd":5110000},
+    {"from_month":"2019-09","to_month":"2021-12","participation_status":"contributed","contribution_type":"compulsory_employer","basis_input_type":"monthly_basis_vnd","monthly_basis_vnd":6960000},
+    {"from_month":"2022-01","to_month":"2022-11","participation_status":"contributed","contribution_type":"compulsory_employer","basis_input_type":"monthly_basis_vnd","monthly_basis_vnd":8397000},
+    {"from_month":"2022-12","to_month":"2023-10","participation_status":"contributed","contribution_type":"compulsory_employer","basis_input_type":"monthly_basis_vnd","monthly_basis_vnd":9072000},
+    {"from_month":"2023-11","to_month":"2026-06","participation_status":"contributed","contribution_type":"compulsory_employer","basis_input_type":"monthly_basis_vnd","monthly_basis_vnd":9156000}
+  ]
+}

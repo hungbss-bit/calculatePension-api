@@ -1,3 +1,12 @@
+## 1.0.7-rc — Mixed State + Employer salary correction
+
+- **Preserved:** all V1.0.6/AR75 behavior and the B_HUONG1 official regression result.
+- **Fixed:** mixed salary profiles containing State salary coefficients plus employer VND salary.
+- For mixed profiles, the State component uses the prescribed State averaging window (for this O_Quy case: 60 months), then the resulting State average is weighted by the **full State contribution duration**, including pre-01/1995 months that count toward contribution duration but are excluded from the average-basis window.
+- The employer component continues to use each VND salary multiplied by the 2026 salary adjustment coefficient.
+- Added official O_Quy2 regression test: 403 months, average 8,655,801 VND, 73%, pension 6,318,735 VND, one-time retirement allowance 0.
+- Render deployment remains FastAPI/Uvicorn: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+
 # CHANGELOG
 
 ## 1.0.0 — V1.0 scope hardening

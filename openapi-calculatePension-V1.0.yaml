@@ -3,7 +3,7 @@ info:
   title: calculatePension API
   description: API dự tính lương hưu BHXH Việt Nam V1.0, bao gồm trợ cấp một lần khi
     nghỉ hưu. Kết quả chỉ mang tính ước tính.
-  version: 1.0.6
+  version: 1.0.7
 paths:
   /v1/validateContributionHistory:
     post:

@@ -45,7 +45,7 @@ from .rules import (
 
 MONEY = Decimal("1")
 PRE1995_CUTOFF = date(1995, 1, 1)
-ENGINE_VERSION = "1.0.6-rc"
+ENGINE_VERSION = "1.0.7-rc"
 POLICY_VERSION = "VN-BHXH-PENSION-V1.0-2026"
 VIETNAM_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 DISCLAIMER = (
@@ -825,7 +825,25 @@ def calculate_average_salary(
         if state_adjusted
         else Decimal("0")
     )
-    state_weight_months = len(state_basis)
+
+    # HỒ SƠ HỖN HỢP NHÀ NƯỚC + DOANH NGHIỆP (Ground Truth O_Quy2):
+    # phần Nhà nước được xác định mức bình quân trên cửa sổ riêng (ví dụ 60 tháng),
+    # sau đó mức bình quân này được nhân với TOÀN BỘ số tháng công tác thuộc nhóm
+    # Nhà nước, bao gồm cả thời gian trước 01/1995 đã được tính vào thời gian BHXH
+    # nhưng bị loại khỏi cửa sổ mức bình quân. Sau đó mới cộng với tổng tiền đã
+    # điều chỉnh của nhóm doanh nghiệp và chia cho tổng số tháng của hai nhóm.
+    #
+    # Với hồ sơ O_Quy1/O_Quy2: 277 tháng Nhà nước (26 tháng trước 1995) +
+    # 126 tháng doanh nghiệp = 403 tháng; không được dùng 251 tháng có tiền
+    # trong nhóm Nhà nước làm trọng số.
+    #
+    # GIỮ NGUYÊN LOGIC B_HUONG1: khi hồ sơ chỉ có tiền lương Nhà nước,
+    # state_weight_months vẫn bằng số tháng có căn cứ tính bình quân (state_basis).
+    if state_basis and employer:
+        state_weight_months = len(state_counted)
+    else:
+        state_weight_months = len(state_basis)
+
     mandatory_months = state_weight_months + len(employer)
     total_basis_months = mandatory_months + len(voluntary)
 
@@ -836,10 +854,17 @@ def calculate_average_salary(
     total_equivalent = mandatory_equivalent + sum(voluntary_adjusted, Decimal("0"))
     average = total_equivalent / Decimal(total_basis_months)
 
-    if state_basis and (employer or voluntary):
+    if state_basis and employer:
         method = (
-            "Bình quân chung quá trình hỗn hợp; phần lương Nhà nước lấy bình quân "
-            "theo cửa sổ quy định rồi quy đổi theo số tháng."
+            "Bình quân chung hồ sơ hỗn hợp Nhà nước + doanh nghiệp; phần lương Nhà nước "
+            "lấy bình quân theo cửa sổ quy định rồi nhân với toàn bộ số tháng thuộc nhóm "
+            "Nhà nước (kể cả thời gian trước 01/1995 chỉ tính thời gian), sau đó kết hợp "
+            "với tổng tiền lương doanh nghiệp đã điều chỉnh."
+        )
+    elif state_basis and voluntary:
+        method = (
+            "Bình quân chung quá trình hỗn hợp Nhà nước + BHXH tự nguyện; phần lương Nhà nước "
+            "lấy bình quân theo cửa sổ quy định rồi kết hợp theo quy tắc tương ứng."
         )
     elif state_basis:
         method = "Bình quân thời kỳ cuối theo chế độ tiền lương Nhà nước."
