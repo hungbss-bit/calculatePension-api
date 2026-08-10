@@ -9,7 +9,7 @@ from pathlib import Path
 from dateutil.relativedelta import relativedelta
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-LEGAL_RULE_VERSION = "VN-BHXH-41/2024-QH15@2025-07-01+DATA-2026+API-V67.4.1"
+LEGAL_RULE_VERSION = "VN-BHXH-58/VBHN-VPQH-2025+ND158-2025+ND159-2025+DATA-2026+API-V1.0"
 SUPPORTED_BENEFIT_YEAR = 2026
 
 

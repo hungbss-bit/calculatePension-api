@@ -1,4 +1,14 @@
 {
+  "calculation": {
+    "calculation_id": "38d1208a-937c-44d8-8e90-23395cf2712a",
+    "engine_version": "1.0.5-rc",
+    "policy_version": "VN-BHXH-PENSION-V1.0-2026"
+  },
+  "identity": {
+    "type": "TEMPORARY",
+    "so_bhxh": null,
+    "temporary_id": "202608100715"
+  },
   "total_months": 372,
   "average_salary": 24535484.0,
   "replacement_rate": 75.0,
@@ -11,7 +21,7 @@
   "warnings": [
     "Phương pháp mức bình quân: Bình quân toàn bộ lương doanh nghiệp sau điều chỉnh.",
     "Số tháng mức đóng trực tiếp dùng trong phép tính: 372; số tháng được quy đổi trọng số trong bình quân chung: 372.",
-    "Phiên bản quy tắc: VN-BHXH-41/2024-QH15@2025-07-01+DATA-2026+API-V67.4.1.",
+    "Phiên bản Engine: 1.0.5-rc; Policy V1.0: VN-BHXH-PENSION-V1.0-2026.",
     "Đây là kết quả ước tính, không thay thế quyết định giải quyết chế độ của cơ quan BHXH."
   ],
   "one_time_retirement_allowance": {

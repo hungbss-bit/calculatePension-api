@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import calendar
+import re
+import uuid
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
@@ -13,6 +17,9 @@ from .models import (
     AverageInclusion,
     BasisInputType,
     BenefitCalculationScope,
+    CalculationIdentity,
+    CalculationMeta,
+    CalculationTrace,
     Contribution,
     ContributionType,
     NormalizedSummary,
@@ -38,6 +45,9 @@ from .rules import (
 
 MONEY = Decimal("1")
 PRE1995_CUTOFF = date(1995, 1, 1)
+ENGINE_VERSION = "1.0.5-rc"
+POLICY_VERSION = "VN-BHXH-PENSION-V1.0-2026"
+VIETNAM_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 DISCLAIMER = (
     "Đây là kết quả ước tính, không thay thế quyết định giải quyết chế độ "
     "của cơ quan BHXH."
@@ -119,6 +129,18 @@ def _append(issues: list[Issue], code: str, message: str, *fields: str) -> None:
     issues.append(Issue(code=code, message=message, fields=tuple(fields)))
 
 
+def resolve_identity(request: PensionCalculationRequest) -> CalculationIdentity:
+    raw = request.identity.so_bhxh if request.identity else None
+    value = raw.strip() if isinstance(raw, str) else None
+    # Số sổ bị che, để trắng hoặc không cung cấp: tạo mã tạm 12 chữ số
+    # theo thời điểm tiếp nhận đến phút; calculation_id vẫn là UUID để phân biệt
+    # nhiều lần gọi trong cùng một phút.
+    if not value or not re.fullmatch(r"\d+", value):
+        temporary_id = datetime.now(VIETNAM_TZ).strftime("%Y%m%d%H%M")
+        return CalculationIdentity(type="TEMPORARY", temporary_id=temporary_id)
+    return CalculationIdentity(type="REAL", so_bhxh=value)
+
+
 def validate_request(request: PensionCalculationRequest) -> ValidationDiagnostics:
     issues: list[Issue] = []
     warnings: list[str] = []
@@ -136,26 +158,24 @@ def validate_request(request: PensionCalculationRequest) -> ValidationDiagnostic
             "pension_start_month",
         )
 
-    if (
-        request.retirement_policy != RetirementPolicy.none
-        and request.retirement_case != RetirementCase.normal
-    ):
+    # V1.0 chỉ tự động hóa nghỉ hưu bình thường. Các trường hợp nghề nặng nhọc,
+    # hầm lò, suy giảm khả năng lao động và chính sách đặc thù để dành cho phiên bản sau.
+    if request.retirement_case != RetirementCase.normal:
         _append(
             issues,
-            "RETIREMENT_POLICY_CASE_CONFLICT",
-            "retirement_policy chỉ được dùng cùng retirement_case=normal trong hợp đồng V67.4.",
-            "retirement_policy",
+            "OUT_OF_SCOPE_RETIREMENT_CASE",
+            (
+                "AI Agent Hưu trí V1.0 chỉ hỗ trợ nghỉ hưu bình thường; "
+                "trường hợp nghề nặng nhọc/đặc thù, hầm lò hoặc suy giảm khả năng lao động "
+                "chưa được tự động hóa."
+            ),
             "retirement_case",
         )
-
-    if request.retirement_policy == RetirementPolicy.other_special_policy:
+    if request.retirement_policy != RetirementPolicy.none:
         _append(
             issues,
-            "OTHER_SPECIAL_POLICY_NOT_AUTOMATED",
-            (
-                "other_special_policy chưa có trường căn cứ/quyết định trong schema V67.4, "
-                "nên backend không thể tự quyết định điều kiện hoặc mức giảm."
-            ),
+            "OUT_OF_SCOPE_RETIREMENT_POLICY",
+            "AI Agent Hưu trí V1.0 không tự động hóa chính sách nghỉ hưu đặc thù.",
             "retirement_policy",
         )
 
@@ -662,161 +682,44 @@ def determine_eligibility(
     request: PensionCalculationRequest,
     records: list[MonthlyRecord],
 ) -> Eligibility:
+    """Eligibility V1.0: chỉ nghỉ hưu bình thường, không giảm tỷ lệ do nghỉ sớm."""
+    if request.retirement_case != RetirementCase.normal:
+        raise BusinessError(
+            "OUT_OF_SCOPE_RETIREMENT_CASE",
+            "V1.0 chỉ hỗ trợ nghỉ hưu bình thường.",
+            ["retirement_case"],
+        )
+    if request.retirement_policy != RetirementPolicy.none:
+        raise BusinessError(
+            "OUT_OF_SCOPE_RETIREMENT_POLICY",
+            "V1.0 không hỗ trợ chính sách nghỉ hưu đặc thù.",
+            ["retirement_policy"],
+        )
+
     total = len(records)
-    compulsory = sum(
-        1 for row in records if row.contribution_type != ContributionType.voluntary
-    )
     pension_start = parse_year_month(request.pension_start_month)
     retirement_end = previous_month_end(pension_start)
     normal = _normal_threshold(request)
-    warnings: list[str] = []
-
-    if request.retirement_case == RetirementCase.normal:
-        if request.retirement_policy == RetirementPolicy.decree_154_streamlining:
-            if compulsory < 180:
-                raise BusinessError(
-                    "INSUFFICIENT_COMPULSORY_CONTRIBUTION",
-                    (
-                        "Trường hợp decree_154_streamlining cần ít nhất 180 tháng "
-                        f"BHXH bắt buộc; hiện có {compulsory} tháng."
-                    ),
-                    ["contributions"],
-                )
-            threshold = earliest_threshold_date(
-                request.person.date_of_birth,
-                request.person.sex.value,
-                5,
-            )
-            if retirement_end < threshold:
-                raise BusinessError(
-                    "RETIREMENT_AGE_NOT_REACHED",
-                    (
-                        f"Ngày nghỉ {retirement_end.isoformat()} chưa đạt ngưỡng "
-                        f"{threshold.isoformat()} của chính sách."
-                    ),
-                    ["person.date_of_birth", "pension_start_month"],
-                )
-            early_months = months_difference(normal, retirement_end)
-            warnings.append(
-                "Áp dụng retirement_policy=decree_154_streamlining: không giảm tỷ lệ; request được coi là đã có căn cứ chính sách hợp lệ."
-            )
-            return Eligibility(
-                retirement_threshold=threshold,
-                normal_threshold=normal,
-                early_retirement_months=early_months,
-                early_retirement_reduction=Decimal("0"),
-                warnings=tuple(warnings),
-            )
-
-        if total < 180:
-            raise BusinessError(
-                "INSUFFICIENT_CONTRIBUTION",
-                f"Cần ít nhất 180 tháng đóng BHXH; hiện có {total} tháng.",
-                ["contributions"],
-            )
-        threshold = normal
-        if retirement_end < threshold:
-            raise BusinessError(
-                "RETIREMENT_AGE_NOT_REACHED",
-                (
-                    f"Ngày nghỉ {retirement_end.isoformat()} chưa đạt tuổi nghỉ hưu "
-                    f"bình thường tại {threshold.isoformat()}."
-                ),
-                ["person.date_of_birth", "pension_start_month"],
-            )
-        return Eligibility(threshold, normal, 0, Decimal("0"))
-
-    if request.retirement_case == RetirementCase.hazardous_or_special_region:
-        if compulsory < 180:
-            raise BusinessError(
-                "INSUFFICIENT_COMPULSORY_CONTRIBUTION",
-                f"Cần ít nhất 180 tháng BHXH bắt buộc; hiện có {compulsory} tháng.",
-                ["contributions"],
-            )
-        threshold = earliest_threshold_date(
-            request.person.date_of_birth,
-            request.person.sex.value,
-            5,
-        )
-        if retirement_end < threshold:
-            raise BusinessError(
-                "RETIREMENT_AGE_NOT_REACHED",
-                (
-                    f"Ngày nghỉ {retirement_end.isoformat()} chưa đạt ngưỡng tuổi "
-                    f"{threshold.isoformat()}."
-                ),
-                ["person.date_of_birth", "pension_start_month"],
-            )
-        warnings.append(
-            "retirement_case=hazardous_or_special_region được coi là đã có căn cứ xác nhận nghề/địa bàn theo hồ sơ."
-        )
-        return Eligibility(threshold, normal, 0, Decimal("0"), tuple(warnings))
-
-    if request.retirement_case == RetirementCase.underground_coal:
-        if compulsory < 180:
-            raise BusinessError(
-                "INSUFFICIENT_COMPULSORY_CONTRIBUTION",
-                f"Cần ít nhất 180 tháng BHXH bắt buộc; hiện có {compulsory} tháng.",
-                ["contributions"],
-            )
-        threshold = earliest_threshold_date(
-            request.person.date_of_birth,
-            request.person.sex.value,
-            10,
-        )
-        if retirement_end < threshold:
-            raise BusinessError(
-                "RETIREMENT_AGE_NOT_REACHED",
-                (
-                    f"Ngày nghỉ {retirement_end.isoformat()} chưa đạt ngưỡng tuổi "
-                    f"{threshold.isoformat()}."
-                ),
-                ["person.date_of_birth", "pension_start_month"],
-            )
-        warnings.append(
-            "retirement_case=underground_coal được coi là đã có căn cứ xác nhận thời gian khai thác than hầm lò."
-        )
-        return Eligibility(threshold, normal, 0, Decimal("0"), tuple(warnings))
-
-    if compulsory < 240:
+    if total < 180:
         raise BusinessError(
-            "INSUFFICIENT_COMPULSORY_CONTRIBUTION",
-            (
-                "Trường hợp reduced_capacity cần ít nhất 240 tháng BHXH bắt buộc; "
-                f"hiện có {compulsory} tháng."
-            ),
+            "INSUFFICIENT_CONTRIBUTION",
+            f"Cần ít nhất 180 tháng đóng BHXH; hiện có {total} tháng.",
             ["contributions"],
         )
-    assert request.impairment_percent is not None
-    offset = 10 if request.impairment_percent >= Decimal("81") else 5
-    threshold = earliest_threshold_date(
-        request.person.date_of_birth,
-        request.person.sex.value,
-        offset,
-    )
-    if retirement_end < threshold:
+    if retirement_end < normal:
         raise BusinessError(
             "RETIREMENT_AGE_NOT_REACHED",
             (
-                f"Ngày nghỉ {retirement_end.isoformat()} chưa đạt ngưỡng tuổi "
-                f"{threshold.isoformat()} của trường hợp suy giảm."
+                f"Ngày nghỉ {retirement_end.isoformat()} chưa đạt tuổi nghỉ hưu "
+                f"bình thường tại {normal.isoformat()}."
             ),
-            ["person.date_of_birth", "pension_start_month", "impairment_percent"],
+            ["person.date_of_birth", "pension_start_month"],
         )
-
-    early_months = months_difference(normal, retirement_end)
-    full_years, remainder = divmod(early_months, 12)
-    reduction = Decimal(full_years * 2)
-    if remainder >= 6:
-        reduction += Decimal("1")
     return Eligibility(
-        threshold,
-        normal,
-        early_months,
-        reduction,
-        (
-            "Giảm tỷ lệ reduced_capacity: 2 điểm phần trăm mỗi năm nghỉ sớm; phần lẻ từ 6 tháng giảm thêm 1 điểm.",
-        ),
+        retirement_threshold=normal,
+        normal_threshold=normal,
+        early_retirement_months=0,
+        early_retirement_reduction=Decimal("0"),
     )
 
 
@@ -874,7 +777,7 @@ def _adjusted_value(
 def calculate_average_salary(
     request: PensionCalculationRequest,
     records: list[MonthlyRecord],
-) -> tuple[Decimal, list[str]]:
+) -> tuple[Decimal, list[str], int, str]:
     salary_table, voluntary_table = adjustment_tables()
     basis_rows = [row for row in records if row.average_included]
     if not basis_rows:
@@ -950,7 +853,7 @@ def calculate_average_salary(
         warnings.append(
             f"Quá trình lương Nhà nước có {len(state_basis)} tháng có mức đóng, ít hơn cửa sổ {state_window} tháng; API dùng toàn bộ tháng hiện có."
         )
-    return average, warnings
+    return average, warnings, total_basis_months, method
 
 
 def calculate_rate(
@@ -965,19 +868,25 @@ def calculate_rate(
             ["contributions"],
         )
     full_years, remainder = divmod(total_months, 12)
-    remainder_rate = (
-        Decimal("0")
-        if remainder == 0
+    # Tháng lẻ phải quy đổi theo đúng mức tăng của từng nhóm tỷ lệ:
+    # - 01–06 tháng = 0,5 năm
+    # - 07–11 tháng = 1 năm
+    # Vì vậy phần tăng thêm khác nhau giữa nữ/nam 15–<20 năm (1%/năm)
+    # và các trường hợp tăng 2%/năm.
+    remainder_years = (
+        Decimal("0") if remainder == 0
+        else Decimal("0.5") if remainder <= 6
         else Decimal("1")
-        if remainder <= 6
-        else Decimal("2")
     )
 
     if sex == Sex.female:
+        remainder_rate = remainder_years * Decimal("2")
         before = Decimal("45") + Decimal(max(0, full_years - 15) * 2) + remainder_rate
     elif full_years < 20:
+        remainder_rate = remainder_years * Decimal("1")
         before = Decimal("40") + Decimal(max(0, full_years - 15)) + remainder_rate
     else:
+        remainder_rate = remainder_years * Decimal("2")
         before = Decimal("45") + Decimal(max(0, full_years - 20) * 2) + remainder_rate
 
     before = min(Decimal("75"), before)
@@ -1098,7 +1007,7 @@ def calculate(request: PensionCalculationRequest) -> PensionCalculationResponse:
 
     records = expand_records(request)
     eligibility = determine_eligibility(request, records)
-    average, average_warnings = calculate_average_salary(request, records)
+    average, average_warnings, average_basis_months, average_basis_method = calculate_average_salary(request, records)
     before_rate, remainder_rate, after_rate = calculate_rate(
         request.person.sex,
         len(records),
@@ -1116,13 +1025,37 @@ def calculate(request: PensionCalculationRequest) -> PensionCalculationResponse:
         eligibility,
     )
 
+    allowance_formula = None
+    if allowance is not None:
+        allowance_formula = (
+            "0.5 × mức bình quân × số tháng vượt trước/sát tuổi / 12 "
+            "+ 2 × mức bình quân × số tháng vượt sau tuổi / 12"
+        )
+
     warnings = list(diagnostics.response.warnings)
     warnings.extend(eligibility.warnings)
     warnings.extend(average_warnings)
-    warnings.append(f"Phiên bản quy tắc: {LEGAL_RULE_VERSION}.")
+    warnings.append(f"Phiên bản Engine: {ENGINE_VERSION}; Policy V1.0: {POLICY_VERSION}.")
     warnings.append(DISCLAIMER)
 
+    identity = resolve_identity(request)
     return PensionCalculationResponse(
+        calculation=CalculationMeta(
+            calculation_id=str(uuid.uuid4()),
+            engine_version=ENGINE_VERSION,
+            policy_version=POLICY_VERSION,
+            trace=CalculationTrace(
+                duration_months=len(records),
+                average_basis_months=average_basis_months,
+                average_basis_method=average_basis_method,
+                pension_rate_percent=float(after_rate),
+                monthly_pension_formula=(
+                    "mức bình quân tiền lương/thu nhập làm căn cứ tính hưởng × tỷ lệ %"
+                ),
+                one_time_allowance_formula=allowance_formula,
+            ),
+        ),
+        identity=identity,
         total_months=len(records),
         average_salary=float(average_rounded),
         replacement_rate=float(after_rate),

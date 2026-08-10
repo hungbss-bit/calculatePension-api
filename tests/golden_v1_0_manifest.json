@@ -1,0 +1,112 @@
+[
+  {
+    "id": "G01",
+    "title": "Chỉ lương doanh nghiệp – nữ",
+    "request_file": "examples/golden_v1_0/G01.json",
+    "expected": {
+      "total_months": 187,
+      "average_salary": 12464171.0,
+      "replacement_rate": 47.0,
+      "estimated_pension": 5858160.0
+    }
+  },
+  {
+    "id": "G02",
+    "title": "Chỉ lương Nhà nước theo mức tiền – nữ",
+    "request_file": "examples/golden_v1_0/G02.json",
+    "expected": {
+      "total_months": 187,
+      "average_salary": 11353333.0,
+      "replacement_rate": 47.0,
+      "estimated_pension": 5336067.0
+    }
+  },
+  {
+    "id": "G03",
+    "title": "Lương Nhà nước theo hệ số – nữ",
+    "request_file": "examples/golden_v1_0/G03.json",
+    "expected": {
+      "total_months": 187,
+      "average_salary": 4587058.0,
+      "replacement_rate": 47.0,
+      "estimated_pension": 2155917.0
+    }
+  },
+  {
+    "id": "G04",
+    "title": "Nhà nước → doanh nghiệp – nữ",
+    "request_file": "examples/golden_v1_0/G04.json",
+    "expected": {
+      "total_months": 187,
+      "average_salary": 8155080.0,
+      "replacement_rate": 47.0,
+      "estimated_pension": 3832888.0
+    }
+  },
+  {
+    "id": "G05",
+    "title": "Doanh nghiệp → Nhà nước – nữ",
+    "request_file": "examples/golden_v1_0/G05.json",
+    "expected": {
+      "total_months": 187,
+      "average_salary": 12100107.0,
+      "replacement_rate": 47.0,
+      "estimated_pension": 5687050.0
+    }
+  },
+  {
+    "id": "G06",
+    "title": "BHXH bắt buộc → tự nguyện – nữ",
+    "request_file": "examples/golden_v1_0/G06.json",
+    "expected": {
+      "total_months": 223,
+      "average_salary": 12105471.0,
+      "replacement_rate": 53.0,
+      "estimated_pension": 6415900.0
+    }
+  },
+  {
+    "id": "G07",
+    "title": "Nhà nước → doanh nghiệp → tự nguyện – nữ",
+    "request_file": "examples/golden_v1_0/G07.json",
+    "expected": {
+      "total_months": 187,
+      "average_salary": 8052406.0,
+      "replacement_rate": 47.0,
+      "estimated_pension": 3784631.0
+    }
+  },
+  {
+    "id": "G08",
+    "title": "PRE-1995 có mức 262 đồng + doanh nghiệp – nữ",
+    "request_file": "examples/golden_v1_0/G08.json",
+    "expected": {
+      "total_months": 439,
+      "average_salary": 24267018.0,
+      "replacement_rate": 75.0,
+      "estimated_pension": 18200264.0
+    }
+  },
+  {
+    "id": "G09",
+    "title": "PRE-1995 không có mức lương/hệ số + doanh nghiệp – nữ",
+    "request_file": "examples/golden_v1_0/G09.json",
+    "expected": {
+      "total_months": 439,
+      "average_salary": 29120422.0,
+      "replacement_rate": 75.0,
+      "estimated_pension": 21840317.0
+    }
+  },
+  {
+    "id": "G10",
+    "title": "PRE-1995 lịch sử quân đội/dân sự + doanh nghiệp + trợ cấp – nam",
+    "request_file": "examples/golden_v1_0/G10.json",
+    "expected": {
+      "total_months": 499,
+      "average_salary": 24267018.0,
+      "replacement_rate": 75.0,
+      "estimated_pension": 18200264.0
+    }
+  }
+]

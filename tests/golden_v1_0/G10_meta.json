@@ -1,0 +1,28 @@
+{
+  "id": "G10",
+  "title": "PRE-1995 lịch sử quân đội/dân sự + doanh nghiệp + trợ cấp – nam",
+  "expected": {
+    "total_months": 499,
+    "average_salary": 24267018.0,
+    "replacement_rate": 75.0,
+    "estimated_pension": 18200264.0,
+    "one_time_retirement_allowance": {
+      "eligible": true,
+      "threshold_months": 420,
+      "total_excess_months": 79,
+      "excess_before_retirement_age_months": 65,
+      "excess_after_retirement_age_months": 14,
+      "standard_allowance_amount": 65723175.0,
+      "post_retirement_allowance_amount": 56623043.0,
+      "total_allowance_amount": 122346218.0,
+      "average_basis": 24267018.0,
+      "warnings": [
+        "Thời gian vượt được tính chính xác theo tháng, không làm tròn thành năm."
+      ]
+    }
+  },
+  "independent_checks": {
+    "pension_equals_average_times_rate": 18200264,
+    "rate_cap_at_75": true
+  }
+}

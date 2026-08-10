@@ -86,7 +86,7 @@ def verify_api_key(
     x_api_key: str | None = Security(api_key_header),
 ) -> None:
     config = _read_expected_api_key()
-    require_api_key = _env_flag("REQUIRE_API_KEY", default=False)
+    require_api_key = _env_flag("REQUIRE_API_KEY", default=True)
 
     if not config.normalized_value:
         if require_api_key:
@@ -149,9 +149,9 @@ def get_auth_diagnostics(x_api_key: str | None) -> dict[str, object]:
 
     return {
         "service": "calculatePension",
-        "version": "67.4.1",
+        "version": "1.0.5-rc",
         "diagnostics_enabled": True,
-        "api_key_required": _env_flag("REQUIRE_API_KEY", default=False),
+        "api_key_required": _env_flag("REQUIRE_API_KEY", default=True),
         "configured": bool(config.normalized_value),
         "configured_env_name": config.env_name,
         "expected_length": (

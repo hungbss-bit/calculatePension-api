@@ -1,113 +1,125 @@
-# calculatePension API V67.4.1 — Deploy ngay
+# calculatePension API V1.0.5-rc — AI Agent Hưu trí
 
-Bản nâng cấp đồng bộ payload với `SCHEMA_V67.4_Complete_OneTimeAllowance.json` và workflow `validateContributionHistory` → `calculatePension`.
+API phục vụ **dự tính lương hưu tại thời điểm nghỉ hưu**, không phải quyết định giải quyết chế độ. V1.0 được khóa phạm vi theo các nguyên tắc đã thống nhất trong thiết kế AI Agent Hưu trí.
 
-## Điểm đã hoàn thiện
+## 1. Phạm vi V1.0
 
-- Request/response đúng hợp đồng V67.4.
-- Chỉ chấp nhận 4 `retirement_case`: `normal`, `hazardous_or_special_region`, `underground_coal`, `reduced_capacity`.
-- Kiểm tra tháng đảo, trùng/chồng, khoảng trống, dòng sau tháng hưởng, trạng thái tham gia và phương thức mức đóng.
-- Tách đúng thời gian trước 01/1995: vẫn cộng thời gian nhưng loại khỏi mức bình quân khi dùng `pre1995_policy`.
-- Loại `not_participating`/BHTN khỏi thời gian và mức bình quân.
-- Quy đổi Mẫu 07/SBH theo 7 thành phần; hệ số lương Nhà nước được nhân mức lương cơ sở/mức tham chiếu theo dữ liệu tích hợp.
-- Tính bình quân lương Nhà nước, doanh nghiệp, tự nguyện và quá trình hỗn hợp.
-- Tính tỷ lệ trước/sau giảm nghỉ trước tuổi.
-- Tính trợ cấp một lần theo số tháng vượt, tách:
-  - đến tháng đủ tuổi: `tháng vượt / 12 × 0,5 × mức bình quân`;
-  - sau tháng đủ tuổi và đủ điều kiện: `tháng vượt / 12 × 2 × mức bình quân`.
-- Không làm tròn thời gian vượt thành năm.
-- Chuẩn hóa lỗi HTTP thành `ErrorResponse`.
-- Xác thực `X-API-Key`.
-- Có 18 kiểm thử tích hợp.
+### Hỗ trợ
+- Nghỉ hưu **bình thường**.
+- Tổng thời gian đóng BHXH bắt buộc + tự nguyện theo dữ liệu đầu vào.
+- Thời gian trước 01/1995: vẫn tính vào tổng thời gian nếu hồ sơ xác nhận là thời gian được tính; mức lương/hệ số có thể có hoặc không có.
+- Tiền lương theo hệ số và theo mức tiền.
+- Quá trình kết hợp Nhà nước + doanh nghiệp.
+- Quá trình kết hợp BHXH bắt buộc + BHXH tự nguyện.
+- Trợ cấp một lần khi nghỉ hưu.
+- Một số sổ BHXH được hỏi nhiều lần: mỗi lần có `calculation_id` riêng.
 
-## Giới hạn dữ liệu hiện tại
+### Không hỗ trợ trong V1.0
+- Nghề/công việc nặng nhọc, độc hại, nguy hiểm hoặc đặc biệt nặng nhọc, độc hại, nguy hiểm.
+- Hầm lò.
+- Suy giảm khả năng lao động.
+- Chính sách nghỉ hưu đặc thù/tinh giản.
+- Điều chỉnh tăng lương hưu sau khi đã nghỉ hưu.
+- BHXH một lần.
 
-Bộ hệ số điều chỉnh tích hợp chỉ dành cho `pension_start_month` thuộc năm **2026**. API trả validation=false nếu dùng năm khác để tránh áp dụng sai bảng hệ số.
+Các trường hợp ngoài phạm vi phải trả `validation=false` hoặc `OUT_OF_SCOPE_*`, không tự suy đoán.
 
-`retirement_policy=other_special_policy` chưa thể tự động hóa vì schema V67.4 không có trường quyết định/căn cứ chi tiết. `decree_154_streamlining` được xử lý theo lựa chọn đã xác nhận trong request và không giảm tỷ lệ.
+## 2. Định danh
 
-Với `hazardous_or_special_region` hoặc `underground_coal`, lựa chọn `retirement_case` được coi là đã có hồ sơ xác nhận điều kiện tương ứng; API vẫn trả cảnh báo.
+`identity.so_bhxh` là tùy chọn.
 
-## Triển khai Render
+- Có số sổ thật: giữ nguyên số sổ làm định danh nghiệp vụ.
+- Để trắng hoặc che số: API sinh `temporary_id` 12 chữ số theo `YYYYMMDDHHMM` theo múi giờ Việt Nam (`Asia/Ho_Chi_Minh`).
+- `temporary_id` không thay thế `calculation_id`; mỗi lần tính vẫn có UUID riêng để phân biệt các lần hỏi.
+- API V1.0 không cần tạo một `HoSoID` nhân tạo làm khóa nghiệp vụ chính.
 
-1. Giải nén gói và đưa thư mục này lên GitHub.
-2. Trên Render, tạo **Blueprint** từ repository; `render.yaml` đã cấu hình sẵn.
-3. Thiết lập biến môi trường:
-   - `API_KEY`: khóa bí mật dài, ngẫu nhiên;
-   - `REQUIRE_API_KEY=true`;
-   - `AUTH_DIAGNOSTICS_ENABLED=false`.
-4. Deploy và kiểm tra:
-   - `GET /health`
-   - `GET /docs`
-
-Build command:
-
-```bash
-pip install -r requirements.txt
-```
-
-Start command:
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
-
-## Triển khai Docker
-
-```bash
-docker build -t calculatepension:v67.4.1 .
-docker run --rm -p 8000:8000 \
-  -e API_KEY='replace-with-secret' \
-  -e REQUIRE_API_KEY=true \
-  calculatepension:v67.4.1
-```
-
-## Cấu hình GPT Action
-
-Dùng file:
+## 3. Workflow
 
 ```text
-SCHEMA_V67.4.1_Deploy.json
+validateContributionHistory
+        ↓ validation=true
+calculatePension
+        ↓
+Calculation + Identity + Result
 ```
 
-Authentication:
+`calculatePension` luôn chạy lại validation.
+
+## 4. PRE-1995
+
+Ví dụ một giai đoạn 1990–1994 có mức 262 VND hoặc không có mức lương/hệ số: **thời gian vẫn phải được tính vào tổng thời gian BHXH** nếu đủ căn cứ xác nhận. Thiếu dữ liệu tiền lương không được biến thời gian thành 0.
+
+Trong V1.0, phần PRE-1995 được đánh dấu `pre1995_policy` và không đưa trực tiếp vào mức bình quân theo chính sách dữ liệu hiện hành của gói này.
+
+## 5. Tỷ lệ lương hưu
+
+V1.0 sử dụng nhóm quy tắc của Điều 66 trong Văn bản hợp nhất 58/VBHN-VPQH 2025:
+
+- Nữ: 45% tại 15 năm, thêm 2%/năm, tối đa 75%.
+- Nam: 45% tại 20 năm, thêm 2%/năm, tối đa 75%.
+- Nam từ đủ 15 đến dưới 20 năm: 40% tại 15 năm, thêm 1%/năm.
+
+Không áp dụng giảm tỷ lệ do nghỉ sớm trong V1.0 vì các trường hợp nghỉ sớm thuộc phạm vi đặc thù đã được loại khỏi V1.0.
+
+## 6. Mức bình quân
+
+Engine tách riêng các nguồn:
+
+- `compulsory_state`;
+- `compulsory_employer`;
+- `voluntary`.
+
+Đối với trường hợp vừa bắt buộc vừa tự nguyện, V1.0 giữ nguyên mô hình bình quân chung theo tổng thời gian và mức bình quân tiền lương bắt buộc + tổng thu nhập tự nguyện sau điều chỉnh.
+
+## 7. Dữ liệu năm 2026
+
+Bộ hệ số điều chỉnh tích hợp hiện chỉ dành cho năm hưởng 2026. Nếu `pension_start_month` không thuộc năm 2026, API từ chối để tránh áp dụng nhầm bảng hệ số.
+
+## 8. API
+
+- `POST /v1/validateContributionHistory`
+- `POST /v1/calculatePension`
+- `GET /health`
+- `GET /docs`
+
+OpenAPI V1.0: `openapi-calculatePension-V1.0.yaml`
+
+Schema V1.0: `SCHEMA_V1.0_Deploy.json`
+
+## 9. Authentication
 
 ```text
-Type: API Key
-Auth type: Custom header
-Header: X-API-Key
-Secret: cùng giá trị API_KEY trên Render
+X-API-Key
 ```
 
-Luồng gọi bắt buộc:
+Render environment:
 
-1. `validateContributionHistory`
-2. Chỉ khi `validation=true`, gọi `calculatePension`
+```text
+API_KEY=<secret>
+REQUIRE_API_KEY=true
+AUTH_DIAGNOSTICS_ENABLED=false
+```
 
-## Chạy kiểm thử
+## 10. Kiểm thử
 
 ```bash
 python -m pytest -q -p no:cacheprovider
 ```
 
-## Ví dụ
+Release gate tối thiểu:
 
-- `examples/request_normal.json`
-- `examples/request_normal_validation_response.json`
-- `examples/request_normal_calculation_response.json`
-- `examples/request_one_time_allowance_split.json`
-- `examples/request_one_time_allowance_split_validation_response.json`
-- `examples/request_one_time_allowance_split_calculation_response.json`
+```text
+Policy → Golden Test → Engine → API Contract
+```
 
-## Dữ liệu tích hợp
+## 11. Tuyên bố
 
-- `data/base_salary_timeline.json`
-- `data/adjustment_coefficients_2026.json`
-- `data/retirement_age_schedule.json`
-- `data/state_average_windows.json`
+Đây là kết quả **dự tính**, không thay thế quyết định giải quyết chế độ của cơ quan BHXH có thẩm quyền.
 
-Các tệp JSON này được chuẩn hóa từ bộ danh mục Excel đính kèm để runtime không phải cài thư viện xử lý Excel.
+## 12. Quy tắc temporary_id
 
-## Tuyên bố
+`temporary_id` 12 chữ số chỉ là mã tạm theo phút, không phải định danh duy nhất tuyệt đối. Nếu nhiều yêu cầu không cung cấp số sổ đến trong cùng một phút, chúng có thể có cùng `temporary_id`; `calculation_id` UUID mới là định danh duy nhất của từng lần tính.
 
-Đây là kết quả ước tính, không thay thế quyết định giải quyết chế độ của cơ quan BHXH.
+## AR-71 release note
+
+The repository is a V1.0 Release Candidate. Local certification tests must pass before merge/release. Production deployment requires `REQUIRE_API_KEY=true` (the application default is also secure-by-default), provide `API_KEY` via the platform secret store, enable HTTPS, and perform a real deployment smoke test. Local `pytest` success alone does not constitute production certification.

@@ -77,6 +77,11 @@ class Person(StrictModel):
     sex: Sex
 
 
+class Identity(StrictModel):
+    """Danh tính tối thiểu cho một hồ sơ tính toán. Số sổ thật là tùy chọn."""
+    so_bhxh: str | None = None
+
+
 class SBHComponents(StrictModel):
     unit: SbhComponentUnit
     base_value: Annotated[Decimal, Field(ge=0)]
@@ -117,6 +122,7 @@ class Contribution(StrictModel):
 
 
 class PensionCalculationRequest(StrictModel):
+    identity: Identity | None = None
     person: Person
     pension_start_month: str = Field(pattern=YEAR_MONTH_PATTERN)
     retirement_case: RetirementCase
@@ -156,7 +162,32 @@ class OneTimeRetirementAllowance(StrictModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class CalculationIdentity(StrictModel):
+    type: str
+    so_bhxh: str | None = None
+    temporary_id: str | None = None
+
+
+class CalculationTrace(StrictModel):
+    """Dấu vết tính toán tối thiểu để AI Agent giải thích và kiểm toán V1.0."""
+    duration_months: int
+    average_basis_months: int
+    average_basis_method: str
+    pension_rate_percent: float
+    monthly_pension_formula: str
+    one_time_allowance_formula: str | None = None
+
+
+class CalculationMeta(StrictModel):
+    calculation_id: str
+    engine_version: str
+    policy_version: str
+    trace: CalculationTrace
+
+
 class PensionCalculationResponse(StrictModel):
+    calculation: CalculationMeta
+    identity: CalculationIdentity
     total_months: int
     average_salary: float
     replacement_rate: float

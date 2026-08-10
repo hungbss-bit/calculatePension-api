@@ -16,3 +16,5 @@ services:
         value: "true"
       - key: AUTH_DIAGNOSTICS_ENABLED
         value: "false"
+      - key: MAX_REQUEST_BODY_BYTES
+        value: "2097152"

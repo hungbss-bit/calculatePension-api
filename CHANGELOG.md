@@ -1,27 +1,54 @@
 # CHANGELOG
 
-## 67.4.1 — 2026-07-31
+## 1.0.0 — V1.0 scope hardening
 
-### Đồng bộ schema
-- Thay mô hình request/response V2.3 cũ bằng hợp đồng V67.4.
-- Loại các enum ngoài schema như `policy_no_reduction`, `occupational_hiv`, `armed_forces`.
-- Bổ sung `retirement_policy`, `retirement_age_eligible_month`, `benefit_calculation_scope`.
-- Chuẩn hóa `ValidationResponse`, `PensionCalculationResponse`, `ErrorResponse`.
+### Phạm vi nghiệp vụ
+- Khóa V1.0 chỉ hỗ trợ nghỉ hưu bình thường.
+- Đưa nghề nặng nhọc/độc hại, hầm lò, suy giảm khả năng lao động và chính sách đặc thù ra ngoài phạm vi tự động hóa.
+- Không tính điều chỉnh tăng lương hưu sau thời điểm nghỉ.
 
-### Nghiệp vụ
-- Xử lý `pre1995_policy` đúng nguyên tắc: tính thời gian, loại khỏi bình quân.
-- Không cho gửi đồng thời `monthly_basis_vnd` và `sbh_components`.
-- Quy đổi hệ số Mẫu 07/SBH theo mức lương cơ sở/mức tham chiếu.
-- Tính bình quân theo nhóm Nhà nước, doanh nghiệp, tự nguyện, hỗn hợp.
-- Tính tỷ lệ tháng lẻ và giảm nghỉ trước tuổi.
-- Bổ sung trợ cấp một lần chi tiết:
-  - ngưỡng nữ 360 tháng, nam 420 tháng;
-  - tách tháng vượt trước/sau tuổi nghỉ hưu;
-  - mức 0,5 và 2 lần;
-  - không làm tròn thời gian.
+### Định danh và truy vết
+- Bổ sung `identity.so_bhxh` tùy chọn.
+- Khi số sổ trống/che, sinh `temporary_id` 12 chữ số theo `YYYYMMDDHHMM`.
+- Mỗi lần tính sinh `calculation_id` UUID riêng, cho phép một số sổ được hỏi nhiều lần mà không ghi đè lần tính.
+- Bổ sung `engine_version` và `policy_version` vào response.
 
-### Vận hành
-- Chuẩn hóa xác thực `X-API-Key`.
-- Thêm schema Action có security scheme.
-- Thêm Render, Docker, ví dụ request/response.
-- 18 kiểm thử tích hợp.
+### PRE-1995
+- Khóa nguyên tắc thời gian PRE-1995 vẫn được tính vào tổng thời gian.
+- Mức lương/hệ số PRE-1995 có thể có hoặc không có; không vì thiếu mức lương mà loại thời gian.
+
+## 1.0.1 — AR-64 Calculation Trace
+
+- Bổ sung `calculation.trace` vào response.
+- Trace ghi số tháng thời gian, số tháng làm căn cứ bình quân, phương pháp bình quân, tỷ lệ và công thức đầu ra.
+- Regenerate OpenAPI/SCHEMA từ FastAPI runtime.
+- Regression tests: 23 passed.
+
+
+## 1.0.2
+- Temporary ID dùng múi giờ `Asia/Ho_Chi_Minh`, không phụ thuộc múi giờ máy chủ Render.
+- Làm rõ `temporary_id` chỉ là mã tạm theo phút; `calculation_id` là định danh duy nhất của từng lần tính.
+- Cập nhật API version/diagnostics version.
+
+
+## 1.0.5-rc — AR-70 Production readiness
+- Added request body size guard (2 MiB default).
+- Added security response headers.
+- Added GitHub Actions certification workflow with least-privilege permissions.
+- Added Dependabot configuration and dependency review workflow.
+- Added SECURITY.md and production-readiness documentation.
+- Synchronized runtime/API/engine version to 1.0.5-rc.
+- Kept V1.0 business scope unchanged.
+
+## 1.0.5-rc — AR-72
+- Secure-by-default API key requirement.
+- Fixed GitHub source-hygiene private-key grep invocation.
+- Final release audit documentation.
+- Removed generated runtime cache artifacts from release contents.
+
+## 1.0.5-rc — AR-73 Final local release audit
+- Synchronized runtime/API/engine/auth diagnostics version to 1.0.5-rc.
+- Enforced request-body size limit for both Content-Length and streamed/chunked requests.
+- Sanitized unhandled exception responses so internal exception types are not exposed.
+- Added V1.0 security regression tests.
+- Added AR-73 final release audit documentation.

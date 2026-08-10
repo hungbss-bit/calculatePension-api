@@ -1,0 +1,615 @@
+openapi: 3.1.0
+info:
+  title: calculatePension API
+  description: API dự tính lương hưu BHXH Việt Nam V1.0, bao gồm trợ cấp một lần khi
+    nghỉ hưu. Kết quả chỉ mang tính ước tính.
+  version: 1.0.5-rc
+paths:
+  /v1/validateContributionHistory:
+    post:
+      summary: Kiểm tra và chuẩn hóa lịch sử đóng BHXH
+      operationId: validateContributionHistory
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PensionCalculationRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - CalculatePensionApiKey: []
+  /v1/calculatePension:
+    post:
+      summary: Tính dự tính lương hưu và trợ cấp một lần
+      operationId: calculatePension
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PensionCalculationRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PensionCalculationResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - CalculatePensionApiKey: []
+components:
+  schemas:
+    AverageExclusionReason:
+      type: string
+      enum:
+      - pre1995_policy
+      title: AverageExclusionReason
+    AverageInclusion:
+      type: string
+      enum:
+      - included
+      - excluded
+      title: AverageInclusion
+    BasisInputType:
+      type: string
+      enum:
+      - mau_07_sbh_components
+      - monthly_basis_vnd
+      title: BasisInputType
+    BenefitCalculationScope:
+      type: string
+      enum:
+      - pension_only
+      - pension_and_one_time_allowance
+      title: BenefitCalculationScope
+    CalculationIdentity:
+      properties:
+        type:
+          type: string
+          title: Type
+        so_bhxh:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: So Bhxh
+        temporary_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Temporary Id
+      additionalProperties: false
+      type: object
+      required:
+      - type
+      title: CalculationIdentity
+    CalculationMeta:
+      properties:
+        calculation_id:
+          type: string
+          title: Calculation Id
+        engine_version:
+          type: string
+          title: Engine Version
+        policy_version:
+          type: string
+          title: Policy Version
+        trace:
+          $ref: '#/components/schemas/CalculationTrace'
+      additionalProperties: false
+      type: object
+      required:
+      - calculation_id
+      - engine_version
+      - policy_version
+      - trace
+      title: CalculationMeta
+    CalculationTrace:
+      properties:
+        duration_months:
+          type: integer
+          title: Duration Months
+        average_basis_months:
+          type: integer
+          title: Average Basis Months
+        average_basis_method:
+          type: string
+          title: Average Basis Method
+        pension_rate_percent:
+          type: number
+          title: Pension Rate Percent
+        monthly_pension_formula:
+          type: string
+          title: Monthly Pension Formula
+        one_time_allowance_formula:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: One Time Allowance Formula
+      additionalProperties: false
+      type: object
+      required:
+      - duration_months
+      - average_basis_months
+      - average_basis_method
+      - pension_rate_percent
+      - monthly_pension_formula
+      title: CalculationTrace
+      description: Dấu vết tính toán tối thiểu để AI Agent giải thích và kiểm toán
+        V1.0.
+    Contribution:
+      properties:
+        from_month:
+          type: string
+          pattern: ^[0-9]{4}-(0[1-9]|1[0-2])$
+          title: From Month
+        to_month:
+          type: string
+          pattern: ^[0-9]{4}-(0[1-9]|1[0-2])$
+          title: To Month
+        participation_status:
+          $ref: '#/components/schemas/ParticipationStatus'
+        duration_only_reason:
+          anyOf:
+          - $ref: '#/components/schemas/DurationOnlyReason'
+          - type: 'null'
+        contribution_type:
+          anyOf:
+          - $ref: '#/components/schemas/ContributionType'
+          - type: 'null'
+        basis_input_type:
+          anyOf:
+          - $ref: '#/components/schemas/BasisInputType'
+          - type: 'null'
+        monthly_basis_vnd:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Monthly Basis Vnd
+        sbh_components:
+          anyOf:
+          - $ref: '#/components/schemas/SBHComponents'
+          - type: 'null'
+        average_inclusion:
+          anyOf:
+          - $ref: '#/components/schemas/AverageInclusion'
+          - type: 'null'
+        average_exclusion_reason:
+          anyOf:
+          - $ref: '#/components/schemas/AverageExclusionReason'
+          - type: 'null'
+        after_retirement_age_period:
+          type: boolean
+          title: After Retirement Age Period
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - from_month
+      - to_month
+      - participation_status
+      title: Contribution
+    ContributionType:
+      type: string
+      enum:
+      - compulsory_state
+      - compulsory_employer
+      - voluntary
+      title: ContributionType
+    DurationOnlyReason:
+      type: string
+      enum:
+      - pre1995_no_salary_or_living_allowance
+      title: DurationOnlyReason
+    ErrorResponse:
+      properties:
+        error_code:
+          type: string
+          title: Error Code
+        detail:
+          type: string
+          title: Detail
+        fields:
+          items:
+            type: string
+          type: array
+          title: Fields
+      additionalProperties: false
+      type: object
+      required:
+      - error_code
+      - detail
+      title: ErrorResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    Identity:
+      properties:
+        so_bhxh:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: So Bhxh
+      additionalProperties: false
+      type: object
+      title: Identity
+      description: Danh tính tối thiểu cho một hồ sơ tính toán. Số sổ thật là tùy
+        chọn.
+    NormalizedSummary:
+      properties:
+        total_contribution_months:
+          type: integer
+          title: Total Contribution Months
+        excluded_bhtn_months:
+          type: integer
+          title: Excluded Bhtn Months
+        contribution_count:
+          type: integer
+          title: Contribution Count
+      additionalProperties: false
+      type: object
+      required:
+      - total_contribution_months
+      - excluded_bhtn_months
+      - contribution_count
+      title: NormalizedSummary
+    OneTimeRetirementAllowance:
+      properties:
+        eligible:
+          type: boolean
+          title: Eligible
+        threshold_months:
+          type: integer
+          title: Threshold Months
+        total_excess_months:
+          type: integer
+          title: Total Excess Months
+        excess_before_retirement_age_months:
+          type: integer
+          title: Excess Before Retirement Age Months
+        excess_after_retirement_age_months:
+          type: integer
+          title: Excess After Retirement Age Months
+        standard_allowance_amount:
+          type: number
+          title: Standard Allowance Amount
+        post_retirement_allowance_amount:
+          type: number
+          title: Post Retirement Allowance Amount
+        total_allowance_amount:
+          type: number
+          title: Total Allowance Amount
+        average_basis:
+          type: number
+          title: Average Basis
+        warnings:
+          items:
+            type: string
+          type: array
+          title: Warnings
+      additionalProperties: false
+      type: object
+      required:
+      - eligible
+      - threshold_months
+      - total_excess_months
+      - excess_before_retirement_age_months
+      - excess_after_retirement_age_months
+      - standard_allowance_amount
+      - post_retirement_allowance_amount
+      - total_allowance_amount
+      - average_basis
+      title: OneTimeRetirementAllowance
+    ParticipationStatus:
+      type: string
+      enum:
+      - contributed
+      - credited_duration_only
+      - not_participating
+      title: ParticipationStatus
+    PensionCalculationRequest:
+      properties:
+        identity:
+          anyOf:
+          - $ref: '#/components/schemas/Identity'
+          - type: 'null'
+        person:
+          $ref: '#/components/schemas/Person'
+        pension_start_month:
+          type: string
+          pattern: ^[0-9]{4}-(0[1-9]|1[0-2])$
+          title: Pension Start Month
+        retirement_case:
+          $ref: '#/components/schemas/RetirementCase'
+        retirement_policy:
+          $ref: '#/components/schemas/RetirementPolicy'
+          default: none
+        impairment_percent:
+          anyOf:
+          - type: number
+            maximum: 100.0
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Impairment Percent
+        contributions:
+          items:
+            $ref: '#/components/schemas/Contribution'
+          type: array
+          minItems: 1
+          title: Contributions
+        retirement_age_eligible_month:
+          anyOf:
+          - type: string
+            pattern: ^[0-9]{4}-(0[1-9]|1[0-2])$
+          - type: 'null'
+          title: Retirement Age Eligible Month
+        benefit_calculation_scope:
+          $ref: '#/components/schemas/BenefitCalculationScope'
+          default: pension_and_one_time_allowance
+      additionalProperties: false
+      type: object
+      required:
+      - person
+      - pension_start_month
+      - retirement_case
+      - contributions
+      title: PensionCalculationRequest
+    PensionCalculationResponse:
+      properties:
+        calculation:
+          $ref: '#/components/schemas/CalculationMeta'
+        identity:
+          $ref: '#/components/schemas/CalculationIdentity'
+        total_months:
+          type: integer
+          title: Total Months
+        average_salary:
+          type: number
+          title: Average Salary
+        replacement_rate:
+          type: number
+          title: Replacement Rate
+        rate_before_early_reduction:
+          type: number
+          title: Rate Before Early Reduction
+        contribution_month_remainder_rate:
+          type: number
+          title: Contribution Month Remainder Rate
+        early_retirement_months:
+          type: integer
+          title: Early Retirement Months
+        early_retirement_reduction:
+          type: number
+          title: Early Retirement Reduction
+        rate_after_reduction:
+          type: number
+          title: Rate After Reduction
+        estimated_pension:
+          type: number
+          title: Estimated Pension
+        warnings:
+          items:
+            type: string
+          type: array
+          title: Warnings
+        one_time_retirement_allowance:
+          anyOf:
+          - $ref: '#/components/schemas/OneTimeRetirementAllowance'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - calculation
+      - identity
+      - total_months
+      - average_salary
+      - replacement_rate
+      - rate_before_early_reduction
+      - contribution_month_remainder_rate
+      - early_retirement_months
+      - early_retirement_reduction
+      - rate_after_reduction
+      - estimated_pension
+      title: PensionCalculationResponse
+    Person:
+      properties:
+        date_of_birth:
+          type: string
+          format: date
+          title: Date Of Birth
+        sex:
+          $ref: '#/components/schemas/Sex'
+      additionalProperties: false
+      type: object
+      required:
+      - date_of_birth
+      - sex
+      title: Person
+    RetirementCase:
+      type: string
+      enum:
+      - normal
+      - hazardous_or_special_region
+      - underground_coal
+      - reduced_capacity
+      title: RetirementCase
+    RetirementPolicy:
+      type: string
+      enum:
+      - none
+      - decree_154_streamlining
+      - other_special_policy
+      title: RetirementPolicy
+    SBHComponents:
+      properties:
+        unit:
+          $ref: '#/components/schemas/SbhComponentUnit'
+        base_value:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Base Value
+        position_allowance:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Position Allowance
+          default: '0'
+        seniority_beyond_frame_allowance:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Seniority Beyond Frame Allowance
+          default: '0'
+        professional_seniority_allowance:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Professional Seniority Allowance
+          default: '0'
+        regional_allowance:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Regional Allowance
+          default: '0'
+        other_allowance:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Other Allowance
+          default: '0'
+        reelection_allowance:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Reelection Allowance
+          default: '0'
+      additionalProperties: false
+      type: object
+      required:
+      - unit
+      - base_value
+      title: SBHComponents
+    SbhComponentUnit:
+      type: string
+      enum:
+      - coefficient
+      - vnd
+      title: SbhComponentUnit
+    Sex:
+      type: string
+      enum:
+      - male
+      - female
+      title: Sex
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    ValidationResponse:
+      properties:
+        validation:
+          type: boolean
+          title: Validation
+        normalized_summary:
+          anyOf:
+          - $ref: '#/components/schemas/NormalizedSummary'
+          - type: 'null'
+        warnings:
+          items:
+            type: string
+          type: array
+          title: Warnings
+      additionalProperties: false
+      type: object
+      required:
+      - validation
+      title: ValidationResponse
+  securitySchemes:
+    CalculatePensionApiKey:
+      type: apiKey
+      description: Khóa bí mật dùng cho GPT Action, gửi qua header X-API-Key.
+      in: header
+      name: X-API-Key
+servers:
+- url: https://calculatepension-api.onrender.com
+  description: API production trên Render
+security:
+- CalculatePensionApiKey: []

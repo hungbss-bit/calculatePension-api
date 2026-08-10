@@ -43,3 +43,13 @@ Các bảng còn lại được dùng để đối chiếu công thức, cấu t
    - sau tuổi và đủ điều kiện: `months / 12 × 2 × average`.
 6. Không áp dụng mức 2 lần cho toàn bộ thời gian vượt.
 7. Không trả số lương hưu khi hồ sơ hoặc điều kiện không hợp lệ.
+
+
+## Phạm vi V1.0 đã chốt
+
+- Chỉ tự động hóa nghỉ hưu bình thường.
+- Không tự động hóa nghề nặng nhọc/độc hại, hầm lò, suy giảm khả năng lao động hoặc chính sách nghỉ hưu đặc thù.
+- Không tính các đợt điều chỉnh tăng lương hưu sau khi đã nghỉ.
+- Thời gian PRE-1995 vẫn tính vào tổng thời gian BHXH; có thể có hoặc không có dữ liệu lương/hệ số.
+- Số sổ BHXH thật là định danh nghiệp vụ tùy chọn; nếu để trống hoặc che số, API sinh `temporary_id` 12 chữ số theo thời điểm tiếp nhận đến phút.
+- Mỗi lần tính có `calculation_id` riêng để phân biệt nhiều lần hỏi của cùng một số sổ.

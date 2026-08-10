@@ -1,0 +1,30 @@
+{
+  "person": {
+    "date_of_birth": "1969-01-01",
+    "sex": "female"
+  },
+  "pension_start_month": "2026-08",
+  "retirement_case": "normal",
+  "retirement_policy": "none",
+  "contributions": [
+    {
+      "from_month": "2008-01",
+      "to_month": "2018-12",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_employer",
+      "after_retirement_age_period": false,
+      "basis_input_type": "monthly_basis_vnd",
+      "monthly_basis_vnd": 10000000
+    },
+    {
+      "from_month": "2019-01",
+      "to_month": "2026-07",
+      "participation_status": "contributed",
+      "contribution_type": "voluntary",
+      "after_retirement_age_period": false,
+      "basis_input_type": "monthly_basis_vnd",
+      "monthly_basis_vnd": 6000000
+    }
+  ],
+  "benefit_calculation_scope": "pension_only"
+}
