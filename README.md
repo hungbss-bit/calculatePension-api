@@ -123,3 +123,9 @@ Policy → Golden Test → Engine → API Contract
 ## AR-71 release note
 
 The repository is a V1.0 Release Candidate. Local certification tests must pass before merge/release. Production deployment requires `REQUIRE_API_KEY=true` (the application default is also secure-by-default), provide `API_KEY` via the platform secret store, enable HTTPS, and perform a real deployment smoke test. Local `pytest` success alone does not constitute production certification.
+
+
+## AR-75 Deployment Fix
+Production server: https://calculatepension-api.onrender.com
+GPT Action schema: `openapi-calculatePension-V1.0.json`
+API authentication header: `X-API-Key`; Render secret variable: `API_KEY`.

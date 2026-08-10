@@ -3,7 +3,7 @@ info:
   title: calculatePension API
   description: API dự tính lương hưu BHXH Việt Nam V1.0, bao gồm trợ cấp một lần khi
     nghỉ hưu. Kết quả chỉ mang tính ước tính.
-  version: 1.0.5-rc
+  version: 1.0.6
 paths:
   /v1/validateContributionHistory:
     post:
@@ -608,3 +608,8 @@ components:
       description: Khóa bí mật dùng cho GPT Action, gửi qua header X-API-Key.
       in: header
       name: X-API-Key
+servers:
+- url: https://calculatepension-api.onrender.com
+  description: API production trên Render
+security:
+- CalculatePensionApiKey: []
