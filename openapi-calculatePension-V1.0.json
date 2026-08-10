@@ -933,16 +933,5 @@
         "name": "X-API-Key"
       }
     }
-  },
-  "servers": [
-    {
-      "url": "https://calculatepension-api.onrender.com",
-      "description": "API production trên Render"
-    }
-  ],
-  "security": [
-    {
-      "CalculatePensionApiKey": []
-    }
-  ]
+  }
 }

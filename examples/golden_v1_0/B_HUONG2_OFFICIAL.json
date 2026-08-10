@@ -1,0 +1,162 @@
+{
+  "name": "B_HUONG2_official_state_salary_2026",
+  "purpose": "Regression against official B_HUONG2 Part II calculation for Tống Thị Hương.",
+  "person": {
+    "date_of_birth": "1969-07-09",
+    "sex": "female"
+  },
+  "pension_start_month": "2026-08",
+  "retirement_case": "normal",
+  "retirement_policy": "none",
+  "retirement_age_eligible_month": "2026-07",
+  "benefit_calculation_scope": "pension_and_one_time_allowance",
+  "contributions": [
+    {
+      "from_month": "1987-09",
+      "to_month": "1994-12",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_state",
+      "average_inclusion": "excluded",
+      "average_exclusion_reason": "pre1995_policy"
+    },
+    {
+      "from_month": "1995-01",
+      "to_month": "1997-12",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_state",
+      "basis_input_type": "mau_07_sbh_components",
+      "sbh_components": {
+        "unit": "coefficient",
+        "base_value": 1.63
+      }
+    },
+    {
+      "from_month": "1998-01",
+      "to_month": "1998-12",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_state",
+      "basis_input_type": "mau_07_sbh_components",
+      "sbh_components": {
+        "unit": "coefficient",
+        "base_value": 1.73
+      }
+    },
+    {
+      "from_month": "1999-01",
+      "to_month": "2004-09",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_state",
+      "basis_input_type": "mau_07_sbh_components",
+      "sbh_components": {
+        "unit": "coefficient",
+        "base_value": 2.16
+      }
+    },
+    {
+      "from_month": "2004-10",
+      "to_month": "2007-11",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_state",
+      "basis_input_type": "mau_07_sbh_components",
+      "sbh_components": {
+        "unit": "coefficient",
+        "base_value": 2.96
+      }
+    },
+    {
+      "from_month": "2007-12",
+      "to_month": "2008-11",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_state",
+      "basis_input_type": "mau_07_sbh_components",
+      "sbh_components": {
+        "unit": "coefficient",
+        "base_value": 3.27
+      }
+    },
+    {
+      "from_month": "2008-12",
+      "to_month": "2010-11",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_state",
+      "basis_input_type": "mau_07_sbh_components",
+      "sbh_components": {
+        "unit": "coefficient",
+        "base_value": 3.27
+      }
+    },
+    {
+      "from_month": "2010-12",
+      "to_month": "2011-09",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_state",
+      "basis_input_type": "mau_07_sbh_components",
+      "sbh_components": {
+        "unit": "coefficient",
+        "base_value": 3.58
+      }
+    },
+    {
+      "from_month": "2011-10",
+      "to_month": "2015-09",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_state",
+      "basis_input_type": "mau_07_sbh_components",
+      "sbh_components": {
+        "unit": "coefficient",
+        "base_value": 3.66
+      }
+    },
+    {
+      "from_month": "2015-10",
+      "to_month": "2018-09",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_state",
+      "basis_input_type": "mau_07_sbh_components",
+      "sbh_components": {
+        "unit": "coefficient",
+        "base_value": 3.99
+      }
+    },
+    {
+      "from_month": "2018-10",
+      "to_month": "2021-09",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_state",
+      "basis_input_type": "mau_07_sbh_components",
+      "sbh_components": {
+        "unit": "coefficient",
+        "base_value": 4.32
+      }
+    },
+    {
+      "from_month": "2021-10",
+      "to_month": "2024-09",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_state",
+      "basis_input_type": "mau_07_sbh_components",
+      "sbh_components": {
+        "unit": "coefficient",
+        "base_value": 4.65
+      }
+    },
+    {
+      "from_month": "2024-10",
+      "to_month": "2026-07",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_state",
+      "basis_input_type": "mau_07_sbh_components",
+      "sbh_components": {
+        "unit": "coefficient",
+        "base_value": 4.98
+      }
+    }
+  ],
+  "expected": {
+    "total_months": 467,
+    "average_salary": 12042800,
+    "replacement_rate": 75,
+    "estimated_pension": 9032100,
+    "one_time_retirement_allowance": 54192600
+  }
+}

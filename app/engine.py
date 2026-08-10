@@ -45,7 +45,7 @@ from .rules import (
 
 MONEY = Decimal("1")
 PRE1995_CUTOFF = date(1995, 1, 1)
-ENGINE_VERSION = "1.0.5-rc"
+ENGINE_VERSION = "1.0.6-rc"
 POLICY_VERSION = "VN-BHXH-PENSION-V1.0-2026"
 VIETNAM_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 DISCLAIMER = (
@@ -616,15 +616,14 @@ def _basis_for_month(
         if period.sbh_components.unit == SbhComponentUnit.vnd:
             return total, SbhComponentUnit.vnd
 
+        # Mẫu 07/SBH ghi lương Nhà nước bằng HỆ SỐ. Khi tính mức bình quân,
+        # hệ số phải nhân với mức lương cơ sở/mức tham chiếu tại thời điểm
+        # hưởng lương hưu, không phải mức lương cơ sở của từng năm đóng.
         pension_month = parse_year_month(request.pension_start_month)
-        if month.year < 2016:
-            reference = base_salary_for_month(pension_month)
-        else:
-            reference = base_salary_for_month(month)
+        reference = base_salary_for_month(pension_month)
         return total * reference, SbhComponentUnit.coefficient
 
     return None, None
-
 
 def expand_records(request: PensionCalculationRequest) -> list[MonthlyRecord]:
     records: list[MonthlyRecord] = []
@@ -757,22 +756,32 @@ def _adjusted_value(
             ) from exc
         return row.basis_vnd * coefficient
 
-    # Lương Nhà nước theo hệ số trước 2016 đã được quy đổi bằng mức lương
-    # cơ sở/mức tham chiếu tại tháng hưởng. Dữ liệu VND xác nhận trước 2016
-    # cũng được coi là mức đã quy đổi, tránh điều chỉnh hai lần.
-    if row.month.year < 2016:
+    # Lương Nhà nước ghi theo HỆ SỐ đã được _basis_for_month() quy đổi
+    # thành VND theo mức lương cơ sở/mức tham chiếu tại tháng hưởng.
+    # Không nhân thêm hệ số điều chỉnh theo năm đóng để tránh điều chỉnh 2 lần.
+    if (
+        row.contribution_type == ContributionType.compulsory_state
+        and row.component_unit == SbhComponentUnit.coefficient
+    ):
         return row.basis_vnd
 
-    try:
-        coefficient = coefficient_for_year(salary_table, row.month.year)
-    except ValueError as exc:
-        raise BusinessError(
-            "SALARY_COEFFICIENT_MISSING",
-            str(exc),
-            ["pension_start_month", "contributions"],
-        ) from exc
-    return row.basis_vnd * coefficient
+    # Nếu hồ sơ Nhà nước cung cấp trực tiếp bằng VND, đây là giá trị tiền
+    # theo lịch sử đóng và cần áp dụng hệ số điều chỉnh tiền lương theo năm
+    # đóng, giống dữ liệu tiền lương của người hưởng lương do Nhà nước quy định.
+    if row.contribution_type == ContributionType.compulsory_state:
+        if row.month.year < 2016:
+            return row.basis_vnd
+        try:
+            coefficient = coefficient_for_year(salary_table, row.month.year)
+        except ValueError as exc:
+            raise BusinessError(
+                "SALARY_COEFFICIENT_MISSING",
+                str(exc),
+                ["pension_start_month", "contributions"],
+            ) from exc
+        return row.basis_vnd * coefficient
 
+    return row.basis_vnd
 
 def calculate_average_salary(
     request: PensionCalculationRequest,
@@ -952,25 +961,27 @@ def calculate_one_time_allowance(
     excess_before = min(excess_before, total_excess)
     excess_after = total_excess - excess_before
 
-    standard = (
-        average
-        * Decimal(excess_before)
-        / Decimal("12")
-        * Decimal("0.5")
-    )
-    post = (
-        average
-        * Decimal(excess_after)
-        / Decimal("12")
-        * Decimal("2")
-    )
+    def allowance_years(months: int) -> Decimal:
+        # Quy đổi thời gian vượt theo năm để tính trợ cấp:
+        # 01–06 tháng = 0,5 năm; 07–11 tháng = 1 năm.
+        full_years, remainder = divmod(months, 12)
+        if remainder == 0:
+            return Decimal(full_years)
+        if remainder <= 6:
+            return Decimal(full_years) + Decimal("0.5")
+        return Decimal(full_years + 1)
+
+    excess_before_years = allowance_years(excess_before)
+    excess_after_years = allowance_years(excess_after)
+    standard = average * excess_before_years * Decimal("0.5")
+    post = average * excess_after_years * Decimal("2")
     total = standard + post
     standard_rounded = standard.quantize(MONEY, rounding=ROUND_HALF_UP)
     post_rounded = post.quantize(MONEY, rounding=ROUND_HALF_UP)
     total_rounded = total.quantize(MONEY, rounding=ROUND_HALF_UP)
 
     warnings.append(
-        "Thời gian vượt được tính chính xác theo tháng, không làm tròn thành năm."
+        "Thời gian vượt được quy đổi theo năm khi tính trợ cấp: 01–06 tháng = 0,5 năm; 07–11 tháng = 1 năm."
     )
     return OneTimeRetirementAllowance(
         eligible=True,

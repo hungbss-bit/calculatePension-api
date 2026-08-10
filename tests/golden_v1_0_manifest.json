@@ -27,9 +27,9 @@
     "request_file": "examples/golden_v1_0/G03.json",
     "expected": {
       "total_months": 187,
-      "average_salary": 4587058.0,
-      "replacement_rate": 47.0,
-      "estimated_pension": 2155917.0
+      "average_salary": 6325000,
+      "replacement_rate": 47,
+      "estimated_pension": 2972750
     }
   },
   {

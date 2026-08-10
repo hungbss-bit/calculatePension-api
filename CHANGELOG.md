@@ -52,3 +52,10 @@
 - Sanitized unhandled exception responses so internal exception types are not exposed.
 - Added V1.0 security regression tests.
 - Added AR-73 final release audit documentation.
+
+
+## 1.0.6-rc — Average salary and retirement allowance correction
+- Fixed State-salary coefficient conversion: use the pension-month base salary/reference for coefficient records, not the historical monthly base salary.
+- Prevented double application of annual salary adjustment coefficients for State-salary coefficient records.
+- Fixed one-time retirement allowance month-to-year conversion: 1–6 months = 0.5 year; 7–11 months = 1 year.
+- Added regression coverage for the official B_HUONG2 calculation profile.

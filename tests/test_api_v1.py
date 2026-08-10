@@ -146,7 +146,7 @@ def test_one_time_allowance_one_excess_month_before_age():
     assert allowance.total_excess_months == 1
     assert allowance.excess_before_retirement_age_months == 1
     assert allowance.excess_after_retirement_age_months == 0
-    expected = round(result.average_salary * 0.5 / 12)
+    expected = round(result.average_salary * 0.25)
     assert allowance.standard_allowance_amount == pytest.approx(expected, abs=1)
 
 
@@ -170,8 +170,8 @@ def test_one_time_allowance_splits_before_and_after_age():
     assert allowance.total_excess_months == 12
     assert allowance.excess_before_retirement_age_months == 5
     assert allowance.excess_after_retirement_age_months == 7
-    expected_standard = round(result.average_salary * 0.5 * 5 / 12)
-    expected_post = round(result.average_salary * 2 * 7 / 12)
+    expected_standard = round(result.average_salary * 0.25)
+    expected_post = round(result.average_salary * 2)
     assert allowance.standard_allowance_amount == pytest.approx(expected_standard, abs=1)
     assert allowance.post_retirement_allowance_amount == pytest.approx(expected_post, abs=1)
 

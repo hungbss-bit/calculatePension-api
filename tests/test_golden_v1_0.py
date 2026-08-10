@@ -11,8 +11,8 @@ MANIFEST = json.loads((ROOT / 'tests/golden_v1_0_manifest.json').read_text(encod
 
 def _expected_allowance_g10():
     avg = Decimal('24267018.46965699208443271768')
-    standard = (avg * Decimal(65) / Decimal(12) * Decimal('0.5')).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
-    post = (avg * Decimal(14) / Decimal(12) * Decimal('2')).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+    standard = (avg * Decimal('5.5') * Decimal('0.5')).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+    post = (avg * Decimal('1.5') * Decimal('2')).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
     return {
         'eligible': True,
         'threshold_months': 420,

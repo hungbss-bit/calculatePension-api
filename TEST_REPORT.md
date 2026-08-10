@@ -1,7 +1,7 @@
-# TEST REPORT — calculatePension API V1.0.5-rc
+# Test Report — V1.0.6-rc
 
-Certification suite: 27 passed.
-
-AR-70 security smoke checks: request-size limit and security headers passed.
-
-Docker build was not executed in this environment because Docker CLI is unavailable.
+- pytest: **31 passed**
+- Official B_HUONG2 regression: **PASS**
+- State coefficient conversion: **PASS**
+- One-time allowance rounding rule: **PASS**
+- Golden regression: **PASS**

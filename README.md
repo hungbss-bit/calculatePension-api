@@ -1,4 +1,4 @@
-# calculatePension API V1.0.5-rc — AI Agent Hưu trí
+# calculatePension API V1.0.6-rc — AI Agent Hưu trí
 
 API phục vụ **dự tính lương hưu tại thời điểm nghỉ hưu**, không phải quyết định giải quyết chế độ. V1.0 được khóa phạm vi theo các nguyên tắc đã thống nhất trong thiết kế AI Agent Hưu trí.
 
