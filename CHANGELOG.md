@@ -68,3 +68,11 @@
 - Prevented double application of annual salary adjustment coefficients for State-salary coefficient records.
 - Fixed one-time retirement allowance month-to-year conversion: 1–6 months = 0.5 year; 7–11 months = 1 year.
 - Added regression coverage for the official B_HUONG2 calculation profile.
+
+## V1.0.8 / AR78 — Render Free Keep-Warm
+
+- Giữ nguyên Calculation Engine V1.0.7 / AR77.
+- Giữ nguyên logic B_HUONG1 và mixed salary O_Quy2.
+- Bổ sung GitHub Actions workflow ping `GET /health` khoảng 14 phút/lần.
+- Không sử dụng API key cho health check.
+- Không thay đổi GPT Actions/OpenAPI contract.

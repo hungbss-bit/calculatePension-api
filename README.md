@@ -129,3 +129,9 @@ The repository is a V1.0 Release Candidate. Local certification tests must pass 
 Production server: https://calculatepension-api.onrender.com
 GPT Action schema: `openapi-calculatePension-V1.0.json`
 API authentication header: `X-API-Key`; Render secret variable: `API_KEY`.
+
+## Render Free Keep-Warm (AR78)
+
+Repository này có workflow `.github/workflows/keep-render-warm.yml` gọi `GET https://calculatepension-api.onrender.com/health` khoảng 14 phút/lần để giảm khả năng Render Free spin down do idle. Workflow không gửi API key và không gọi endpoint tính toán.
+
+Lưu ý: GitHub Actions schedule có thể bị trễ; cơ chế này không đảm bảo uptime 100%. Kiểm tra workflow trong tab **Actions** của GitHub.
