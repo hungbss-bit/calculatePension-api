@@ -1,4 +1,13 @@
-# calculatePension API V1.0.7-rc — AI Agent Hưu trí
+
+## V1.0.9-rc — Early retirement Case 1 + Case 2
+
+- Giữ nguyên toàn bộ logic đúng của V1.0/AR77 và workflow keep-warm AR78.
+- **Case 1:** suy giảm khả năng lao động (`retirement_case=reduced_capacity`), cần `impairment_percent >= 61`, tối thiểu 20 năm BHXH bắt buộc, nghỉ trước không quá 5 năm; giảm 2%/năm, dưới 6 tháng không giảm, 6–<12 tháng giảm 1%.
+- **Case 2:** tinh giản biên chế theo NĐ 154/2025/NĐ-CP (`retirement_case=normal`, `retirement_policy=decree_154_streamlining`), trong phạm vi điều kiện lao động bình thường; không trừ tỷ lệ lương hưu do nghỉ trước tuổi, tối đa 5 năm trong V1.x.
+- GPTs phải hỏi người dùng chọn chính sách trước khi gọi API khi chưa đủ tuổi nghỉ hưu bình thường.
+- Các nhánh nghề nặng nhọc/đặc biệt, hầm lò và chính sách đặc thù khác vẫn ngoài phạm vi.
+
+# calculatePension API V1.0.9-rc — AI Agent Hưu trí
 
 API phục vụ **dự tính lương hưu tại thời điểm nghỉ hưu**, không phải quyết định giải quyết chế độ. V1.0 được khóa phạm vi theo các nguyên tắc đã thống nhất trong thiết kế AI Agent Hưu trí.
 

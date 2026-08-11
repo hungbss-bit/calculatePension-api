@@ -45,7 +45,7 @@ from .rules import (
 
 MONEY = Decimal("1")
 PRE1995_CUTOFF = date(1995, 1, 1)
-ENGINE_VERSION = "1.0.7-rc"
+ENGINE_VERSION = "1.0.9-rc"
 POLICY_VERSION = "VN-BHXH-PENSION-V1.0-2026"
 VIETNAM_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 DISCLAIMER = (
@@ -158,24 +158,54 @@ def validate_request(request: PensionCalculationRequest) -> ValidationDiagnostic
             "pension_start_month",
         )
 
-    # V1.0 chỉ tự động hóa nghỉ hưu bình thường. Các trường hợp nghề nặng nhọc,
-    # hầm lò, suy giảm khả năng lao động và chính sách đặc thù để dành cho phiên bản sau.
-    if request.retirement_case != RetirementCase.normal:
+    # V1.0.9 bổ sung đúng hai nhánh nghỉ hưu trước tuổi đã được thống nhất:
+    # (1) reduced_capacity: suy giảm khả năng lao động;
+    # (2) normal + decree_154_streamlining: tinh giản biên chế theo NĐ 154/2025/NĐ-CP.
+    # Các nhánh nghề nặng nhọc/đặc thù và hầm lò vẫn ngoài phạm vi V1.x.
+    supported_case = request.retirement_case in {
+        RetirementCase.normal,
+        RetirementCase.reduced_capacity,
+    }
+    supported_policy = request.retirement_policy in {
+        RetirementPolicy.none,
+        RetirementPolicy.decree_154_streamlining,
+    }
+    valid_pair = (
+        request.retirement_case == RetirementCase.normal
+        and request.retirement_policy in {
+            RetirementPolicy.none,
+            RetirementPolicy.decree_154_streamlining,
+        }
+    ) or (
+        request.retirement_case == RetirementCase.reduced_capacity
+        and request.retirement_policy == RetirementPolicy.none
+    )
+    if not supported_case:
         _append(
             issues,
             "OUT_OF_SCOPE_RETIREMENT_CASE",
             (
-                "AI Agent Hưu trí V1.0 chỉ hỗ trợ nghỉ hưu bình thường; "
-                "trường hợp nghề nặng nhọc/đặc thù, hầm lò hoặc suy giảm khả năng lao động "
-                "chưa được tự động hóa."
+                "V1.x chỉ hỗ trợ nghỉ hưu bình thường hoặc suy giảm khả năng lao động; "
+                "nghề nặng nhọc/đặc thù và hầm lò chưa được tự động hóa."
             ),
             "retirement_case",
         )
-    if request.retirement_policy != RetirementPolicy.none:
+    if not supported_policy:
         _append(
             issues,
             "OUT_OF_SCOPE_RETIREMENT_POLICY",
-            "AI Agent Hưu trí V1.0 không tự động hóa chính sách nghỉ hưu đặc thù.",
+            "Chính sách nghỉ hưu đặc thù này chưa được tự động hóa.",
+            "retirement_policy",
+        )
+    if supported_case and supported_policy and not valid_pair:
+        _append(
+            issues,
+            "RETIREMENT_CASE_POLICY_CONFLICT",
+            (
+                "Cặp retirement_case/retirement_policy không hợp lệ. Dùng normal+none, "
+                "normal+decree_154_streamlining hoặc reduced_capacity+none."
+            ),
+            "retirement_case",
             "retirement_policy",
         )
 
@@ -681,44 +711,128 @@ def determine_eligibility(
     request: PensionCalculationRequest,
     records: list[MonthlyRecord],
 ) -> Eligibility:
-    """Eligibility V1.0: chỉ nghỉ hưu bình thường, không giảm tỷ lệ do nghỉ sớm."""
-    if request.retirement_case != RetirementCase.normal:
-        raise BusinessError(
-            "OUT_OF_SCOPE_RETIREMENT_CASE",
-            "V1.0 chỉ hỗ trợ nghỉ hưu bình thường.",
-            ["retirement_case"],
-        )
-    if request.retirement_policy != RetirementPolicy.none:
-        raise BusinessError(
-            "OUT_OF_SCOPE_RETIREMENT_POLICY",
-            "V1.0 không hỗ trợ chính sách nghỉ hưu đặc thù.",
-            ["retirement_policy"],
-        )
-
-    total = len(records)
+    """Xác định điều kiện hưởng theo 3 nhánh: bình thường, suy giảm KNLĐ, NĐ154."""
     pension_start = parse_year_month(request.pension_start_month)
     retirement_end = previous_month_end(pension_start)
     normal = _normal_threshold(request)
-    if total < 180:
-        raise BusinessError(
-            "INSUFFICIENT_CONTRIBUTION",
-            f"Cần ít nhất 180 tháng đóng BHXH; hiện có {total} tháng.",
-            ["contributions"],
-        )
-    if retirement_end < normal:
-        raise BusinessError(
-            "RETIREMENT_AGE_NOT_REACHED",
-            (
-                f"Ngày nghỉ {retirement_end.isoformat()} chưa đạt tuổi nghỉ hưu "
-                f"bình thường tại {normal.isoformat()}."
+    compulsory_months = sum(
+        1
+        for row in records
+        if row.contribution_type
+        in {ContributionType.compulsory_state, ContributionType.compulsory_employer}
+    )
+
+    # Nghỉ hưu bình thường.
+    if request.retirement_case == RetirementCase.normal and request.retirement_policy == RetirementPolicy.none:
+        if len(records) < 180:
+            raise BusinessError(
+                "INSUFFICIENT_CONTRIBUTION",
+                f"Cần ít nhất 180 tháng đóng BHXH; hiện có {len(records)} tháng.",
+                ["contributions"],
+            )
+        if retirement_end < normal:
+            raise BusinessError(
+                "RETIREMENT_AGE_NOT_REACHED",
+                (
+                    f"Ngày nghỉ {retirement_end.isoformat()} chưa đạt tuổi nghỉ hưu "
+                    f"bình thường tại {normal.isoformat()}."
+                ),
+                ["person.date_of_birth", "pension_start_month"],
+            )
+        return Eligibility(normal, normal, 0, Decimal("0"))
+
+    # Case 1: suy giảm khả năng lao động. V1.x chỉ tự động hóa ngưỡng từ 61%
+    # và thời gian nghỉ trước tuổi không quá 5 năm. Theo Điều 66 Luật BHXH 2024:
+    # mỗi năm giảm 2%; dưới 6 tháng không giảm; từ đủ 6 đến dưới 12 tháng giảm 1%.
+    if request.retirement_case == RetirementCase.reduced_capacity:
+        if compulsory_months < 240:
+            raise BusinessError(
+                "INSUFFICIENT_COMPULSORY_CONTRIBUTION_REDUCED_CAPACITY",
+                (
+                    f"Trường hợp suy giảm khả năng lao động cần ít nhất 240 tháng "
+                    f"BHXH bắt buộc; hồ sơ hiện có {compulsory_months} tháng."
+                ),
+                ["contributions"],
+            )
+        if retirement_end >= normal:
+            return Eligibility(normal, normal, 0, Decimal("0"), (
+                "Hồ sơ đã đủ tuổi nghỉ hưu bình thường; không áp dụng giảm tỷ lệ do nghỉ trước tuổi.",
+            ))
+        early_months = months_difference(normal, pension_start)
+        if early_months > 60:
+            raise BusinessError(
+                "EARLY_RETIREMENT_OVER_5_YEARS",
+                (
+                    f"Thời điểm hưởng lương hưu sớm khoảng {early_months} tháng, "
+                    "vượt quá phạm vi V1.x là không quá 5 năm."
+                ),
+                ["pension_start_month", "person.date_of_birth"],
+            )
+        full_years, remainder = divmod(early_months, 12)
+        reduction = Decimal(full_years * 2)
+        if remainder >= 6:
+            reduction += Decimal("1")
+        return Eligibility(
+            retirement_threshold=normal,
+            normal_threshold=normal,
+            early_retirement_months=early_months,
+            early_retirement_reduction=reduction,
+            warnings=(
+                f"Case 1 – suy giảm khả năng lao động: nghỉ trước khoảng {early_months} tháng; "
+                f"giảm {reduction}% theo quy tắc hiện hành.",
             ),
-            ["person.date_of_birth", "pension_start_month"],
         )
-    return Eligibility(
-        retirement_threshold=normal,
-        normal_threshold=normal,
-        early_retirement_months=0,
-        early_retirement_reduction=Decimal("0"),
+
+    # Case 2: tinh giản biên chế theo NĐ 154/2025/NĐ-CP. Trong V1.x chỉ tự động
+    # hóa điều kiện lao động bình thường; không suy đoán các nhánh nghề nặng nhọc,
+    # vùng đặc biệt khó khăn hoặc lực lượng đặc thù. Chính sách này không trừ tỷ lệ
+    # lương hưu do nghỉ trước tuổi.
+    if request.retirement_case == RetirementCase.normal and request.retirement_policy == RetirementPolicy.decree_154_streamlining:
+        if pension_start.year < 2025 or pension_start > date(2030, 12, 1):
+            raise BusinessError(
+                "DECREE_154_OUTSIDE_POLICY_PERIOD",
+                "NĐ 154/2025/NĐ-CP được áp dụng đến hết ngày 31/12/2030 trong phạm vi tích hợp này.",
+                ["pension_start_month"],
+            )
+        if compulsory_months < 180:
+            raise BusinessError(
+                "INSUFFICIENT_COMPULSORY_CONTRIBUTION_DECREE_154",
+                (
+                    f"Trường hợp tinh giản biên chế cần đủ thời gian đóng BHXH bắt buộc "
+                    f"để hưởng lương hưu; hồ sơ hiện có {compulsory_months} tháng."
+                ),
+                ["contributions"],
+            )
+        if retirement_end >= normal:
+            return Eligibility(normal, normal, 0, Decimal("0"), (
+                "Case 2 – NĐ 154/2025/NĐ-CP: không giảm tỷ lệ do nghỉ trước tuổi.",
+            ))
+        early_months = months_difference(normal, pension_start)
+        if early_months > 60:
+            raise BusinessError(
+                "DECREE_154_EARLY_OVER_5_YEARS",
+                (
+                    f"Thời điểm hưởng lương hưu sớm khoảng {early_months} tháng; "
+                    "V1.x chỉ tự động hóa nhánh nghỉ trước tuổi không quá 5 năm "
+                    "trong điều kiện lao động bình thường."
+                ),
+                ["pension_start_month", "person.date_of_birth"],
+            )
+        return Eligibility(
+            retirement_threshold=normal,
+            normal_threshold=normal,
+            early_retirement_months=early_months,
+            early_retirement_reduction=Decimal("0"),
+            warnings=(
+                f"Case 2 – tinh giản biên chế theo NĐ 154/2025/NĐ-CP: nghỉ trước khoảng {early_months} tháng; "
+                "không trừ tỷ lệ lương hưu do nghỉ trước tuổi.",
+            ),
+        )
+
+    raise BusinessError(
+        "RETIREMENT_CASE_POLICY_CONFLICT",
+        "Cặp retirement_case/retirement_policy không được hỗ trợ.",
+        ["retirement_case", "retirement_policy"],
     )
 
 
@@ -998,8 +1112,15 @@ def calculate_one_time_allowance(
 
     excess_before_years = allowance_years(excess_before)
     excess_after_years = allowance_years(excess_after)
-    standard = average * excess_before_years * Decimal("0.5")
-    post = average * excess_after_years * Decimal("2")
+    # Ground-truth hồ sơ NĐ154 tính trợ cấp trên mức bình quân đã làm tròn đến đồng.
+    # Giữ nguyên engine hiện hành cho các case khác; chỉ áp dụng quy tắc này cho Case 2.
+    allowance_average = (
+        average.quantize(MONEY, rounding=ROUND_HALF_UP)
+        if request.retirement_policy == RetirementPolicy.decree_154_streamlining
+        else average
+    )
+    standard = allowance_average * excess_before_years * Decimal("0.5")
+    post = allowance_average * excess_after_years * Decimal("2")
     total = standard + post
     standard_rounded = standard.quantize(MONEY, rounding=ROUND_HALF_UP)
     post_rounded = post.quantize(MONEY, rounding=ROUND_HALF_UP)

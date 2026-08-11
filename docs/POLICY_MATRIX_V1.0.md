@@ -81,3 +81,14 @@ Không phát hành V1.0 nếu:
 - PRE-1995 bị mất khỏi tổng thời gian;
 - một số sổ được hỏi nhiều lần làm ghi đè/nhầm Calculation;
 - thiếu dữ liệu quan trọng nhưng Engine vẫn tự đoán.
+
+
+## Early retirement additions — V1.0.9
+
+| Case | Request pair | Preconditions | Rate reduction | Scope |
+|---|---|---|---|---|
+| Normal | `normal` + `none` | Normal retirement age reached | 0% | Existing V1.0 behavior preserved |
+| Case 1 — reduced capacity | `reduced_capacity` + `none` | >=61% impairment, >=20 years compulsory BHXH, early <=5 years | 2% per full year; <6 months 0%; 6–<12 months 1% | Current Law 41/2024 + NĐ158/2025, normal working conditions |
+| Case 2 — streamlining | `normal` + `decree_154_streamlining` | Sufficient compulsory BHXH for pension, early <=5 years | **0%** | NĐ154/2025, normal working conditions only |
+
+GPT must ask the user to select Case 1 or Case 2 before calling the API when the requested pension start precedes normal retirement age.

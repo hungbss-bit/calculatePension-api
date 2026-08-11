@@ -1,7 +1,7 @@
 # KNOWLEDGE BASE HƯU TRÍ V1.0
-## Bộ tri thức hỏi – đáp cơ bản cho AI Agent Hưu trí
+## Bộ tri thức hỏi – đáp cơ bản cho AI Agent Hưu trí - BHXH tỉnh Bắc Ninh
 
-**Phiên bản:** V1.0  
+**Phiên bản:** V1.0  - 2026
 **Mục đích:** Trả lời các câu hỏi phổ thông về nguyên tắc, điều kiện và cách tính lương hưu mà **không cần gọi API tính toán**.  
 **Phạm vi:** Giải thích chính sách và phương pháp ở mức dễ hiểu; không thay thế quyết định giải quyết chế độ của cơ quan BHXH.
 

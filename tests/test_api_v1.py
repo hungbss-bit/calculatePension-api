@@ -176,26 +176,39 @@ def test_one_time_allowance_splits_before_and_after_age():
     assert allowance.post_retirement_allowance_amount == pytest.approx(expected_post, abs=1)
 
 
-def test_v1_rejects_special_policy_as_out_of_scope():
+def test_case1_reduced_capacity_accepts_61_percent_and_applies_1_percent_at_6_months():
     request = make_request(
-        [monthly_period("2011-01", "2025-12")],
-        retirement_policy="decree_154_streamlining",
-    )
-    result = validate_request(request).response
-    assert result.validation is False
-    assert any("OUT_OF_SCOPE_RETIREMENT_POLICY" in warning for warning in result.warnings)
-
-
-def test_v1_rejects_reduced_capacity_as_out_of_scope():
-    request = make_request(
-        [monthly_period("2006-01", "2025-12")],
-        person={"date_of_birth": "1970-01-01", "sex": "male"},
+        [monthly_period("2006-01", "2025-12", amount=10_000_000)],
+        person={"date_of_birth": "1965-01-01", "sex": "male"},
+        pension_start_month="2026-01",
         retirement_case="reduced_capacity",
-        impairment_percent=81,
+        retirement_policy="none",
+        impairment_percent=61,
+        retirement_age_eligible_month="2026-07",
     )
-    result = validate_request(request).response
-    assert result.validation is False
-    assert any("OUT_OF_SCOPE_RETIREMENT_CASE" in warning for warning in result.warnings)
+    result = calculate(request)
+    assert result.total_months == 240
+    assert result.early_retirement_months == 6
+    assert result.early_retirement_reduction == 1
+    assert result.rate_before_early_reduction == 45
+    assert result.rate_after_reduction == 44
+
+
+def test_case2_decree_154_has_no_early_retirement_rate_reduction():
+    request = make_request(
+        [monthly_period("2006-01", "2025-12", amount=10_000_000)],
+        person={"date_of_birth": "1965-01-01", "sex": "male"},
+        pension_start_month="2026-01",
+        retirement_case="normal",
+        retirement_policy="decree_154_streamlining",
+        retirement_age_eligible_month="2026-07",
+    )
+    result = calculate(request)
+    assert result.total_months == 240
+    assert result.early_retirement_months == 6
+    assert result.early_retirement_reduction == 0
+    assert result.rate_before_early_reduction == 45
+    assert result.rate_after_reduction == 45
 
 
 def test_real_so_bhxh_is_reusable_across_calculations():

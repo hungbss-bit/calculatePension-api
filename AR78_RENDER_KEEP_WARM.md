@@ -57,3 +57,8 @@ Nếu `/health` trả HTTP 200, step sẽ kết thúc thành công.
 ## Giới hạn quan trọng
 
 Keep-warm chỉ xử lý trường hợp Render đưa Free Web Service vào trạng thái ngủ do không có traffic. Nó không ngăn được mọi trường hợp restart, lỗi nền tảng, bảo trì hoặc giới hạn tài nguyên của gói Free. Khi hệ thống phục vụ production quan trọng, nên dùng instance trả phí/giải pháp uptime phù hợp.
+
+
+## AR79 calculation additions
+
+This package retains the AR78 keep-warm workflow and adds the two controlled early-retirement branches described in the V1.0.9 release notes.

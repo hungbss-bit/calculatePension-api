@@ -1,3 +1,11 @@
+## 1.0.9-rc — Early retirement Case 1 + Case 2
+
+- **Preserved:** all V1.0/AR77 mixed-salary logic, B_HUONG1 and O_Quy2 official regression behavior, plus AR78 Render keep-warm workflow.
+- **Case 1:** `retirement_case=reduced_capacity`, `retirement_policy=none`; requires at least 240 months compulsory BHXH and `impairment_percent >= 61`; V1.x supports early retirement up to 5 years. Reduction follows current Article 66 rule: 2% per full year, no reduction for a remainder under 6 months, 1% for 6–<12 months.
+- **Case 2:** `retirement_case=normal`, `retirement_policy=decree_154_streamlining`; supports normal working conditions, sufficient compulsory contribution duration for pension, early retirement up to 5 years, and **no pension-rate reduction for early retirement**.
+- Hazardous/special-region, underground-coal and other special policies remain out of scope.
+- Added official ND154 ground-truth regression and early-retirement unit tests.
+
 ## 1.0.7-rc — Mixed State + Employer salary correction
 
 - **Preserved:** all V1.0.6/AR75 behavior and the B_HUONG1 official regression result.
