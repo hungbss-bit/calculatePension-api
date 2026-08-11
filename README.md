@@ -1,4 +1,26 @@
 
+## V1.0.10-rc — Bổ sung nghỉ hưởng chế độ thai sản
+
+- Giữ nguyên các quy tắc tính đang có của V1.0.9-rc.
+- Bổ sung `duration_only_reason=maternity_leave`.
+- Thời gian nghỉ thai sản được cộng vào tổng thời gian BHXH và mức đóng được kế thừa từ tháng liền kề ngay trước kỳ nghỉ.
+- Dòng thai sản trên Mẫu 07/SBH không nhập `monthly_basis_vnd`, `sbh_components` hoặc `basis_input_type`; API tự kế thừa sau khi validation xác nhận có tháng trước hợp lệ.
+- Nếu không có tháng liền kề trước kỳ nghỉ với mức đóng hợp lệ, API trả validation lỗi thay vì tự suy đoán.
+
+### Ví dụ dữ liệu nghỉ thai sản
+
+```json
+{
+  "from_month": "2020-07",
+  "to_month": "2020-12",
+  "participation_status": "credited_duration_only",
+  "duration_only_reason": "maternity_leave",
+  "contribution_type": "compulsory_employer"
+}
+```
+
+Ví dụ trên sẽ kế thừa mức đóng của tháng `2020-06` nếu tháng đó có mức đóng hợp lệ và cùng `contribution_type`.
+
 ## V1.0.9-rc — Early retirement Case 1 + Case 2
 
 - Giữ nguyên toàn bộ logic đúng của V1.0/AR77 và workflow keep-warm AR78.
@@ -7,7 +29,7 @@
 - GPTs phải hỏi người dùng chọn chính sách trước khi gọi API khi chưa đủ tuổi nghỉ hưu bình thường.
 - Các nhánh nghề nặng nhọc/đặc biệt, hầm lò và chính sách đặc thù khác vẫn ngoài phạm vi.
 
-# calculatePension API V1.0.9-rc — AI Agent Hưu trí
+# calculatePension API V1.0.10-rc — AI Agent Hưu trí
 
 API phục vụ **dự tính lương hưu tại thời điểm nghỉ hưu**, không phải quyết định giải quyết chế độ. V1.0 được khóa phạm vi theo các nguyên tắc đã thống nhất trong thiết kế AI Agent Hưu trí.
 

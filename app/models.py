@@ -40,6 +40,7 @@ class ParticipationStatus(str, Enum):
 
 class DurationOnlyReason(str, Enum):
     pre1995_no_salary_or_living_allowance = "pre1995_no_salary_or_living_allowance"
+    maternity_leave = "maternity_leave"
 
 
 class ContributionType(str, Enum):

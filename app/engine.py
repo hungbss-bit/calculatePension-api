@@ -5,7 +5,7 @@ import re
 import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Iterable
@@ -22,6 +22,7 @@ from .models import (
     CalculationTrace,
     Contribution,
     ContributionType,
+    DurationOnlyReason,
     NormalizedSummary,
     OneTimeRetirementAllowance,
     ParticipationStatus,
@@ -45,7 +46,7 @@ from .rules import (
 
 MONEY = Decimal("1")
 PRE1995_CUTOFF = date(1995, 1, 1)
-ENGINE_VERSION = "1.0.9-rc"
+ENGINE_VERSION = "1.0.10-rc"
 POLICY_VERSION = "VN-BHXH-PENSION-V1.0-2026"
 VIETNAM_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 DISCLAIMER = (
@@ -80,6 +81,7 @@ class MonthlyRecord:
     month: date
     contribution_type: ContributionType
     participation_status: ParticipationStatus
+    duration_only_reason: DurationOnlyReason | None
     basis_input_type: BasisInputType | None
     basis_vnd: Decimal | None
     component_unit: SbhComponentUnit | None
@@ -234,6 +236,7 @@ def validate_request(request: PensionCalculationRequest) -> ValidationDiagnostic
     excluded_months: set[date] = set()
     covered_months: set[date] = set()
     pre1995_excluded_months = 0
+    maternity_months = 0
     eligible_month = (
         parse_year_month(request.retirement_age_eligible_month)
         if request.retirement_age_eligible_month
@@ -290,51 +293,100 @@ def validate_request(request: PensionCalculationRequest) -> ValidationDiagnostic
                     f"Dòng {index + 1} là not_participating; mọi mức đóng/thành phần được bỏ qua."
                 )
         elif period.participation_status == ParticipationStatus.credited_duration_only:
-            if not is_pre1995:
-                _append(
-                    issues,
-                    "CREDITED_DURATION_ONLY_AFTER_1994",
-                    "credited_duration_only chỉ hợp lệ cho thời gian kết thúc trước 01/1995.",
-                    f"{prefix}.participation_status",
-                    f"{prefix}.to_month",
-                )
-            if (
-                period.duration_only_reason is None
-                or period.duration_only_reason.value
-                != "pre1995_no_salary_or_living_allowance"
-            ):
+            reason = period.duration_only_reason
+
+            if reason == DurationOnlyReason.pre1995_no_salary_or_living_allowance:
+                if not is_pre1995:
+                    _append(
+                        issues,
+                        "CREDITED_DURATION_ONLY_AFTER_1994",
+                        (
+                            "duration_only_reason=pre1995_no_salary_or_living_allowance "
+                            "chỉ hợp lệ cho thời gian kết thúc trước 01/1995."
+                        ),
+                        f"{prefix}.participation_status",
+                        f"{prefix}.duration_only_reason",
+                        f"{prefix}.to_month",
+                    )
+                if period.contribution_type is None:
+                    _append(
+                        issues,
+                        "CONTRIBUTION_TYPE_REQUIRED",
+                        "Giai đoạn được cộng thời gian phải có contribution_type.",
+                        f"{prefix}.contribution_type",
+                    )
+                if has_monthly or has_components or period.basis_input_type is not None:
+                    _append(
+                        issues,
+                        "DURATION_ONLY_BASIS_NOT_ALLOWED",
+                        "credited_duration_only PRE-1995 không được mang mức đóng vào bình quân.",
+                        f"{prefix}.monthly_basis_vnd",
+                        f"{prefix}.sbh_components",
+                        f"{prefix}.basis_input_type",
+                    )
+                if period.average_inclusion == AverageInclusion.included:
+                    _append(
+                        issues,
+                        "DURATION_ONLY_AVERAGE_INCLUDED",
+                        "credited_duration_only PRE-1995 không được đưa trực tiếp vào tính mức bình quân.",
+                        f"{prefix}.average_inclusion",
+                    )
+
+            elif reason == DurationOnlyReason.maternity_leave:
+                # Nghỉ hưởng chế độ thai sản được tính là thời gian tham gia BHXH.
+                # Mẫu 07/SBH thường không ghi mức đóng/hệ số cho các tháng này;
+                # engine sẽ kế thừa mức đóng của tháng liền kề ngay trước kỳ nghỉ.
+                if period.contribution_type is None:
+                    _append(
+                        issues,
+                        "CONTRIBUTION_TYPE_REQUIRED",
+                        "Giai đoạn nghỉ thai sản phải có contribution_type để giữ đúng nhóm tiền lương.",
+                        f"{prefix}.contribution_type",
+                    )
+                if has_monthly or has_components or period.basis_input_type is not None:
+                    _append(
+                        issues,
+                        "MATERNITY_BASIS_MUST_BE_INHERITED",
+                        (
+                            "Giai đoạn nghỉ hưởng chế độ thai sản không nhập mức đóng/hệ số trực tiếp; "
+                            "API tự kế thừa mức đóng của tháng liền kề trước khi nghỉ."
+                        ),
+                        f"{prefix}.monthly_basis_vnd",
+                        f"{prefix}.sbh_components",
+                        f"{prefix}.basis_input_type",
+                    )
+                if (
+                    not is_pre1995
+                    and period.average_inclusion == AverageInclusion.excluded
+                ):
+                    _append(
+                        issues,
+                        "MATERNITY_AVERAGE_EXCLUSION_NOT_ALLOWED",
+                        (
+                            "Thời gian nghỉ hưởng chế độ thai sản từ 01/1995 trở đi "
+                            "phải được đưa vào mức bình quân bằng mức đóng kế thừa."
+                        ),
+                        f"{prefix}.average_inclusion",
+                    )
+                maternity_months += sum(1 for _ in month_range(start, end))
+
+            else:
                 _append(
                     issues,
                     "DURATION_ONLY_REASON_REQUIRED",
                     (
                         "credited_duration_only phải có duration_only_reason="
-                        "pre1995_no_salary_or_living_allowance."
+                        "pre1995_no_salary_or_living_allowance hoặc maternity_leave."
                     ),
                     f"{prefix}.duration_only_reason",
                 )
-            if period.contribution_type is None:
-                _append(
-                    issues,
-                    "CONTRIBUTION_TYPE_REQUIRED",
-                    "Giai đoạn được cộng thời gian phải có contribution_type.",
-                    f"{prefix}.contribution_type",
-                )
-            if has_monthly or has_components or period.basis_input_type is not None:
-                _append(
-                    issues,
-                    "DURATION_ONLY_BASIS_NOT_ALLOWED",
-                    "credited_duration_only không được mang mức đóng vào bình quân.",
-                    f"{prefix}.monthly_basis_vnd",
-                    f"{prefix}.sbh_components",
-                    f"{prefix}.basis_input_type",
-                )
-            if period.average_inclusion == AverageInclusion.included:
-                _append(
-                    issues,
-                    "DURATION_ONLY_AVERAGE_INCLUDED",
-                    "credited_duration_only không được đưa vào tính mức bình quân.",
-                    f"{prefix}.average_inclusion",
-                )
+                if period.contribution_type is None:
+                    _append(
+                        issues,
+                        "CONTRIBUTION_TYPE_REQUIRED",
+                        "Giai đoạn được cộng thời gian phải có contribution_type.",
+                        f"{prefix}.contribution_type",
+                    )
         else:
             if period.contribution_type is None:
                 _append(
@@ -595,6 +647,20 @@ def validate_request(request: PensionCalculationRequest) -> ValidationDiagnostic
                     f"contributions[{index}].after_retirement_age_period",
                 )
 
+    # Kiểm tra khả năng kế thừa mức đóng cho các tháng nghỉ thai sản.
+    # Chỉ chạy khi các kiểm tra cấu trúc cơ bản đã hợp lệ để tránh che lấp lỗi gốc.
+    if maternity_months and not issues:
+        try:
+            expand_records(request)
+        except BusinessError as exc:
+            _append(issues, exc.error_code, exc.detail, *exc.fields)
+
+    if maternity_months and not issues:
+        warnings.append(
+            f"Đã tính {maternity_months} tháng nghỉ hưởng chế độ thai sản vào thời gian BHXH "
+            "và kế thừa mức đóng của tháng liền kề trước kỳ nghỉ."
+        )
+
     if excluded_months:
         warnings.append(
             f"Đã loại {len(excluded_months)} tháng not_participating/BHTN khỏi thời gian và mức bình quân."
@@ -689,6 +755,7 @@ def expand_records(request: PensionCalculationRequest) -> list[MonthlyRecord]:
                     month=month,
                     contribution_type=period.contribution_type,
                     participation_status=period.participation_status,
+                    duration_only_reason=period.duration_only_reason,
                     basis_input_type=period.basis_input_type,
                     basis_vnd=basis,
                     component_unit=unit,
@@ -696,7 +763,56 @@ def expand_records(request: PensionCalculationRequest) -> list[MonthlyRecord]:
                     after_retirement_age_period=after_age,
                 )
             )
-    return sorted(records, key=lambda row: row.month)
+
+    # Giải quyết mức đóng của thời gian nghỉ hưởng chế độ thai sản theo đúng
+    # mức đóng của tháng liền kề ngay trước kỳ nghỉ. Các tháng thai sản liên tiếp
+    # tiếp tục kế thừa cùng mức đã được giải quyết từ tháng trước.
+    ordered = sorted(records, key=lambda row: row.month)
+    resolved: list[MonthlyRecord] = []
+    for row in ordered:
+        if row.duration_only_reason == DurationOnlyReason.maternity_leave:
+            if not resolved or next_month(resolved[-1].month) != row.month:
+                raise BusinessError(
+                    "MATERNITY_PREVIOUS_BASIS_MISSING",
+                    (
+                        f"Không xác định được tháng liền kề trước tháng thai sản "
+                        f"{format_year_month(row.month)} để kế thừa mức đóng."
+                    ),
+                    ["contributions"],
+                )
+
+            previous = resolved[-1]
+            if previous.basis_vnd is None:
+                raise BusinessError(
+                    "MATERNITY_PREVIOUS_BASIS_MISSING",
+                    (
+                        f"Tháng liền kề trước tháng thai sản {format_year_month(row.month)} "
+                        "không có mức đóng/hệ số hợp lệ để kế thừa."
+                    ),
+                    ["contributions"],
+                )
+
+            if previous.contribution_type != row.contribution_type:
+                raise BusinessError(
+                    "MATERNITY_CONTRIBUTION_TYPE_MISMATCH",
+                    (
+                        f"Nhóm đóng BHXH của tháng thai sản {format_year_month(row.month)} "
+                        "không khớp với tháng liền kề trước kỳ nghỉ; không thể tự kế thừa mức đóng."
+                    ),
+                    ["contributions"],
+                )
+
+            row = replace(
+                row,
+                basis_input_type=previous.basis_input_type,
+                basis_vnd=previous.basis_vnd,
+                component_unit=previous.component_unit,
+                average_included=row.month >= PRE1995_CUTOFF,
+            )
+
+        resolved.append(row)
+
+    return resolved
 
 
 def _normal_threshold(request: PensionCalculationRequest) -> date:

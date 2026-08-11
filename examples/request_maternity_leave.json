@@ -1,0 +1,36 @@
+{
+  "person": {
+    "date_of_birth": "1969-01-01",
+    "sex": "female"
+  },
+  "pension_start_month": "2026-02",
+  "retirement_case": "normal",
+  "retirement_policy": "none",
+  "contributions": [
+    {
+      "from_month": "2011-01",
+      "to_month": "2020-06",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_employer",
+      "basis_input_type": "monthly_basis_vnd",
+      "monthly_basis_vnd": 8000000
+    },
+    {
+      "from_month": "2020-07",
+      "to_month": "2020-12",
+      "participation_status": "credited_duration_only",
+      "duration_only_reason": "maternity_leave",
+      "contribution_type": "compulsory_employer"
+    },
+    {
+      "from_month": "2021-01",
+      "to_month": "2026-01",
+      "participation_status": "contributed",
+      "contribution_type": "compulsory_employer",
+      "basis_input_type": "monthly_basis_vnd",
+      "monthly_basis_vnd": 9000000
+    }
+  ],
+  "retirement_age_eligible_month": "2026-01",
+  "benefit_calculation_scope": "pension_only"
+}

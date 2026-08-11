@@ -16,7 +16,7 @@ from .models import (
 from .privacy_vi import get_privacy_policy_html
 from .swagger_vi import get_swagger_ui_vi_html
 
-API_VERSION = "1.0.9"
+API_VERSION = "1.0.10"
 
 MAX_REQUEST_BODY_BYTES = int(__import__("os").getenv("MAX_REQUEST_BODY_BYTES", "2097152"))
 

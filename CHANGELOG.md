@@ -1,3 +1,13 @@
+## 1.0.10-rc — Nghỉ hưởng chế độ thai sản
+
+- **Preserved:** giữ nguyên các quy tắc tính hiện có; chỉ bổ sung xử lý thời gian nghỉ hưởng chế độ thai sản.
+- Bổ sung `duration_only_reason=maternity_leave` cho `participation_status=credited_duration_only`.
+- Tháng nghỉ thai sản được cộng vào tổng thời gian BHXH.
+- Mẫu 07/SBH của giai đoạn thai sản không cần/không được nhập mức đóng hoặc hệ số trực tiếp; engine kế thừa mức đóng của **tháng liền kề ngay trước kỳ nghỉ**.
+- Mức kế thừa giữ nguyên nhóm đóng (`contribution_type`), kiểu căn cứ và đơn vị hệ số/VND; các tháng thai sản từ 01/1995 trở đi được đưa vào mức bình quân.
+- Nếu không có tháng liền kề trước kỳ nghỉ với mức đóng hợp lệ, validation trả `MATERNITY_PREVIOUS_BASIS_MISSING` thay vì tự đoán.
+- Bổ sung 5 regression tests cho doanh nghiệp, hệ số Nhà nước, tổng thời gian, mức bình quân tương đương và các lỗi dữ liệu đầu vào.
+
 ## 1.0.9-rc — Early retirement Case 1 + Case 2
 
 - **Preserved:** all V1.0/AR77 mixed-salary logic, B_HUONG1 and O_Quy2 official regression behavior, plus AR78 Render keep-warm workflow.

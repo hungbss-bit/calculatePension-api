@@ -3,13 +3,8 @@
   "info": {
     "title": "calculatePension API",
     "description": "API dự tính lương hưu BHXH Việt Nam V1.0, bao gồm trợ cấp một lần khi nghỉ hưu. Kết quả chỉ mang tính ước tính.",
-    "version": "1.0.9"
+    "version": "1.0.10"
   },
-  "servers": [
-    {
-      "url": "https://calculatepension-api.onrender.com"
-    }
-  ],
   "paths": {
     "/v1/validateContributionHistory": {
       "post": {
@@ -379,7 +374,8 @@
       "DurationOnlyReason": {
         "type": "string",
         "enum": [
-          "pre1995_no_salary_or_living_allowance"
+          "pre1995_no_salary_or_living_allowance",
+          "maternity_leave"
         ],
         "title": "DurationOnlyReason"
       },
@@ -938,5 +934,10 @@
         "name": "X-API-Key"
       }
     }
-  }
+  },
+  "servers": [
+    {
+      "url": "https://calculatepension-api.onrender.com"
+    }
+  ]
 }

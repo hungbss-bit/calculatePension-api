@@ -11,7 +11,7 @@ client = TestClient(app)
 def test_health_security_headers_and_version():
     r = client.get('/health')
     assert r.status_code == 200
-    assert r.json()['version'] == '1.0.9'
+    assert r.json()['version'] == '1.0.10'
     assert r.headers['X-Content-Type-Options'] == 'nosniff'
     assert r.headers['X-Frame-Options'] == 'DENY'
     assert r.headers['Cache-Control'] == 'no-store'
