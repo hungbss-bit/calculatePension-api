@@ -1108,16 +1108,25 @@ def calculate_average_salary(
     warnings = [
         f"Phương pháp mức bình quân: {method}",
         (
-            f"Số tháng mức đóng trực tiếp dùng trong phép tính: "
+            f"Số tháng dữ liệu trực tiếp dùng trong phép bình quân: "
             f"{len(selected_state) + len(employer) + len(voluntary)}; "
-            f"số tháng được quy đổi trọng số trong bình quân chung: {total_basis_months}."
+            f"tổng số tháng dữ liệu của các nhóm tham gia được xử lý theo Rule: {total_basis_months}. "
+            "Không diễn giải tổng số tháng dữ liệu này là mẫu số của phép bình quân nếu average_basis.basis_months_used có giá trị riêng."
         ),
     ]
     if state_window is not None and len(state_basis) < state_window:
         warnings.append(
             f"Quá trình lương Nhà nước có {len(state_basis)} tháng có mức đóng, ít hơn cửa sổ {state_window} tháng; API dùng toàn bộ tháng hiện có."
         )
-    return average, warnings, total_basis_months, method
+    # Contract V2.0: basis_months_used là số tháng thực tế trực tiếp làm mẫu số
+    # của phép bình quân. Với hồ sơ Nhà nước thuần túy, đây là cửa sổ cuối
+    # (ví dụ 60 tháng), không phải tổng số tháng tham gia sau khi loại PRE-1995.
+    # Với hồ sơ hỗn hợp, giữ tổng số tháng quy đổi trọng số theo Rule hỗn hợp.
+    if state_basis and not employer and not voluntary:
+        basis_months_used = len(selected_state)
+    else:
+        basis_months_used = total_basis_months
+    return average, warnings, basis_months_used, method
 
 
 def calculate_rate(

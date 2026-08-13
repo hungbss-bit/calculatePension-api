@@ -1,35 +1,44 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+import yaml
+
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .auth import get_auth_diagnostics, verify_api_key
-from .engine import BusinessError, calculate, validate_request
-from .models import (
-    ErrorResponse,
-    PensionCalculationRequest,
-    PensionCalculationResponse,
-    ValidationResponse,
-)
+from .engine import BusinessError, calculate, validate_request, calculate_average_salary, expand_records
+from .models import ErrorResponse
 from .privacy_vi import get_privacy_policy_html
 from .swagger_vi import get_swagger_ui_vi_html
+from .v2_adapter import validate_v2_payload, to_internal, build_v2_response
 
-API_VERSION = "1.0.10"
-
-MAX_REQUEST_BODY_BYTES = int(__import__("os").getenv("MAX_REQUEST_BODY_BYTES", "2097152"))
+API_VERSION = "2.3.0"
+ACTION_SCHEMA_VERSION = "2.0.0"
+MAX_REQUEST_BODY_BYTES = int(os.getenv("MAX_REQUEST_BODY_BYTES", "2097152"))
 
 app = FastAPI(
     title="calculatePension API",
     version=API_VERSION,
     description=(
-        "API dự tính lương hưu BHXH Việt Nam V1.0, "
-        "bao gồm trợ cấp một lần khi nghỉ hưu. Kết quả chỉ mang tính ước tính."
+        "API dự tính lương hưu BHXH Việt Nam 2.3.0; contract GPT Action V2.0. "
+        "Kết quả chỉ mang tính ước tính."
     ),
     docs_url=None,
     redoc_url=None,
 )
+
+# Static contract is the single source for the public API documentation.
+_CONTRACT_PATH = Path(__file__).resolve().parent.parent / "contracts" / "02_API_V2.3.0.yaml"
+_CONTRACT = yaml.safe_load(_CONTRACT_PATH.read_text(encoding="utf-8"))
+
+
+def custom_openapi():
+    return _CONTRACT
+app.openapi = custom_openapi
 
 
 @app.middleware("http")
@@ -38,38 +47,13 @@ async def security_middleware(request: Request, call_next):
     if content_length:
         try:
             if int(content_length) > MAX_REQUEST_BODY_BYTES:
-                return JSONResponse(
-                    status_code=413,
-                    content=ErrorResponse(
-                        error_code="REQUEST_BODY_TOO_LARGE",
-                        detail="Kích thước yêu cầu vượt giới hạn cho phép.",
-                        fields=["content-length"],
-                    ).model_dump(mode="json"),
-                )
+                return JSONResponse(status_code=413, content={"error_code":"REQUEST_BODY_TOO_LARGE","detail":"Kích thước yêu cầu vượt giới hạn cho phép.","fields":["content-length"]})
         except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content=ErrorResponse(
-                    error_code="INVALID_CONTENT_LENGTH",
-                    detail="Header Content-Length không hợp lệ.",
-                    fields=["content-length"],
-                ).model_dump(mode="json"),
-            )
-
-    # Also enforce the limit for chunked/streamed requests that omit Content-Length.
-    # FastAPI/Starlette caches request.body(), so downstream validation can reuse it.
+            return JSONResponse(status_code=400, content={"error_code":"INVALID_CONTENT_LENGTH","detail":"Header Content-Length không hợp lệ.","fields":["content-length"]})
     if request.method in {"POST", "PUT", "PATCH"}:
         body = await request.body()
         if len(body) > MAX_REQUEST_BODY_BYTES:
-            return JSONResponse(
-                status_code=413,
-                content=ErrorResponse(
-                    error_code="REQUEST_BODY_TOO_LARGE",
-                    detail="Kích thước yêu cầu vượt giới hạn cho phép.",
-                    fields=["request.body"],
-                ).model_dump(mode="json"),
-            )
-
+            return JSONResponse(status_code=413, content={"error_code":"REQUEST_BODY_TOO_LARGE","detail":"Kích thước yêu cầu vượt giới hạn cho phép.","fields":["request.body"]})
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
@@ -85,151 +69,80 @@ async def security_middleware(request: Request, call_next):
 def home() -> RedirectResponse:
     return RedirectResponse(url="/docs")
 
-
 @app.get("/docs", include_in_schema=False)
 def docs_vi():
     return get_swagger_ui_vi_html()
 
-
 @app.get("/docs-en", include_in_schema=False)
 def docs_en():
-    return get_swagger_ui_html(
-        openapi_url=app.openapi_url,
-        title=f"{app.title} - Swagger UI",
-        swagger_ui_parameters={
-            "deepLinking": True,
-            "displayRequestDuration": True,
-            "filter": True,
-            "persistAuthorization": True,
-        },
-    )
-
+    return get_swagger_ui_html(openapi_url=app.openapi_url, title=f"{app.title} - Swagger UI", swagger_ui_parameters={"deepLinking":True,"displayRequestDuration":True,"filter":True,"persistAuthorization":True})
 
 @app.get("/privacy-policy", include_in_schema=False, response_class=HTMLResponse)
 def privacy_policy() -> HTMLResponse:
     return HTMLResponse(content=get_privacy_policy_html())
 
-
 @app.get("/health", include_in_schema=False)
 def health() -> dict[str, str]:
-    return {
-        "status": "ok",
-        "service": "calculatePension",
-        "version": API_VERSION,
-        "schema_version": "V1.0",
-    }
+    return {"status":"ok","service":"calculatePension","version":API_VERSION,"action_schema_version":ACTION_SCHEMA_VERSION,"schema_version":"2.3.0","engine_version":"1.0.10-rc","policy_version":"VN-BHXH-PENSION-V1.0-2026"}
 
+@app.get("/version", include_in_schema=False)
+def version() -> dict[str, str]:
+    return {"api_version":API_VERSION,"action_schema_version":ACTION_SCHEMA_VERSION,"engine_version":"1.0.10-rc","policy_version":"VN-BHXH-PENSION-V1.0-2026","contract":"02_API_V2.3.0.yaml"}
 
 @app.get("/v1/authDiagnostics", include_in_schema=False)
-def auth_diagnostics(
-    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
-) -> dict[str, object]:
+def auth_diagnostics(x_api_key: str | None = Header(default=None, alias="X-API-Key")):
     return get_auth_diagnostics(x_api_key)
 
-
-@app.post(
-    "/v1/validateContributionHistory",
-    operation_id="validateContributionHistory",
-    response_model=ValidationResponse,
-    responses={400: {"model": ErrorResponse}},
-    dependencies=[Depends(verify_api_key)],
-    summary="Kiểm tra và chuẩn hóa lịch sử đóng BHXH",
-)
-def validate_history(
-    request: PensionCalculationRequest,
-) -> ValidationResponse:
-    return validate_request(request).response
+@app.get("/v1/capabilities", include_in_schema=False, dependencies=[Depends(verify_api_key)])
+def capabilities():
+    return {"api_version":API_VERSION,"action_schema_version":ACTION_SCHEMA_VERSION,"supports":["validateContributionHistory","calculatePension","mau_07_sbh_components","nd154_2025_streamlining"],"scope_excludes":["armed_forces"],"nd154_state_budget_allowance_excluded":True}
 
 
-@app.post(
-    "/v1/calculatePension",
-    operation_id="calculatePension",
-    response_model=PensionCalculationResponse,
-    response_model_exclude_none=True,
-    responses={400: {"model": ErrorResponse}},
-    dependencies=[Depends(verify_api_key)],
-    summary="Tính dự tính lương hưu và trợ cấp một lần",
-)
-def calculate_pension(
-    request: PensionCalculationRequest,
-) -> PensionCalculationResponse:
-    return calculate(request)
+def _read_payload(request: Request):
+    # FastAPI dependency injection is intentionally avoided so the public request
+    # contract can remain exactly the externally supplied V2.0/2.3.0 JSON Schema.
+    return request.json()
 
+@app.post("/v1/validateContributionHistory", operation_id="validateContributionHistory", dependencies=[Depends(verify_api_key)], summary="Kiểm tra dữ liệu quá trình BHXH trước khi tính")
+async def validate_history(request: Request):
+    try:
+        payload = await request.json()
+        validate_v2_payload(payload)
+        internal = to_internal(payload)
+        diag = validate_request(internal)
+        total = diag.response.normalized_summary.total_contribution_months if diag.response.normalized_summary else 0
+        excluded = diag.response.normalized_summary.excluded_bhtn_months if diag.response.normalized_summary else 0
+        avg_months = 0
+        if diag.response.validation:
+            _, _, avg_months, _ = calculate_average_salary(internal, expand_records(internal))
+        return {"valid_for_calculation":diag.response.validation,"total_unique_months":total,"average_basis_months":avg_months,"credited_duration_only_months":0,"excluded_non_participation_months":excluded,"gaps":[],"overlaps":[],"issues":[]}
+    except ValueError as exc:
+        return JSONResponse(status_code=422, content={"detail":[{"loc":["body"],"msg":str(exc),"type":"value_error"}]})
+    except BusinessError as exc:
+        return JSONResponse(status_code=422, content={"detail":[{"loc":["body"],"msg":exc.detail,"type":exc.error_code}]})
 
-
+@app.post("/v1/calculatePension", operation_id="calculatePension", dependencies=[Depends(verify_api_key)], summary="Dự tính mức lương hưu")
+async def calculate_pension(request: Request):
+    try:
+        payload = await request.json()
+        validate_v2_payload(payload)
+        internal = to_internal(payload)
+        diagnostics = validate_request(internal)
+        if not diagnostics.response.validation:
+            fields = sorted({f for issue in diagnostics.issues for f in issue.fields})
+            detail = "; ".join(issue.message for issue in diagnostics.issues[:6])
+            return JSONResponse(status_code=422, content={"detail":[{"loc":["body"],"msg":detail,"type":"CONTRIBUTION_HISTORY_INVALID","fields":fields}]})
+        result = calculate(internal)
+        return build_v2_response(payload, result, diagnostics, internal)
+    except ValueError as exc:
+        return JSONResponse(status_code=422, content={"detail":[{"loc":["body"],"msg":str(exc),"type":"value_error"}]})
+    except BusinessError as exc:
+        return JSONResponse(status_code=422, content={"detail":[{"loc":["body"],"msg":exc.detail,"type":exc.error_code,"fields":exc.fields}]})
 
 @app.exception_handler(HTTPException)
-async def http_exception_handler(
-    _: Request,
-    exc: HTTPException,
-) -> JSONResponse:
-    if isinstance(exc.detail, dict):
-        error_code = str(exc.detail.get("error_code", f"HTTP_{exc.status_code}"))
-        detail = str(
-            exc.detail.get("detail")
-            or exc.detail.get("message_vi")
-            or "Yêu cầu HTTP không hợp lệ."
-        )
-        fields = list(exc.detail.get("fields", []))
-    else:
-        error_code = f"HTTP_{exc.status_code}"
-        detail = str(exc.detail)
-        fields = []
-    payload = ErrorResponse(
-        error_code=error_code,
-        detail=detail,
-        fields=fields,
-    )
-    return JSONResponse(
-        status_code=exc.status_code,
-        content=payload.model_dump(mode="json"),
-        headers=exc.headers,
-    )
-
-
-@app.exception_handler(BusinessError)
-async def business_error_handler(
-    _: Request,
-    exc: BusinessError,
-) -> JSONResponse:
-    payload = ErrorResponse(
-        error_code=exc.error_code,
-        detail=exc.detail,
-        fields=exc.fields,
-    )
-    return JSONResponse(status_code=400, content=payload.model_dump(mode="json"))
-
-
-@app.exception_handler(RequestValidationError)
-async def request_validation_error_handler(
-    _: Request,
-    exc: RequestValidationError,
-) -> JSONResponse:
-    fields: list[str] = []
-    details: list[str] = []
-    for error in exc.errors():
-        loc = ".".join(str(item) for item in error.get("loc", ()) if item != "body")
-        if loc:
-            fields.append(loc)
-        details.append(f"{loc or 'request'}: {error.get('msg', 'Dữ liệu không hợp lệ')}")
-    payload = ErrorResponse(
-        error_code="REQUEST_VALIDATION_ERROR",
-        detail="; ".join(details),
-        fields=sorted(set(fields)),
-    )
-    return JSONResponse(status_code=400, content=payload.model_dump(mode="json"))
-
+async def http_exception_handler(_: Request, exc: HTTPException):
+    return JSONResponse(status_code=exc.status_code, content=exc.detail if isinstance(exc.detail, dict) else {"error_code":f"HTTP_{exc.status_code}","detail":str(exc.detail),"fields":[]}, headers=exc.headers)
 
 @app.exception_handler(Exception)
-async def unhandled_exception_handler(
-    _: Request,
-    exc: Exception,
-) -> JSONResponse:
-    # Do not expose exception class/module names to clients.
-    # Detailed diagnostics belong in platform logs/monitoring only.
-    payload = ErrorResponse(
-        error_code="INTERNAL_CALCULATION_ERROR",
-        detail="Đã xảy ra lỗi nội bộ trong quá trình tính toán.",
-        fields=[],
-    )
-    return JSONResponse(status_code=500, content=payload.model_dump(mode="json"))
+async def unhandled_exception_handler(_: Request, exc: Exception):
+    return JSONResponse(status_code=500, content={"error_code":"INTERNAL_CALCULATION_ERROR","detail":"Đã xảy ra lỗi nội bộ trong quá trình tính toán.","fields":[]})
