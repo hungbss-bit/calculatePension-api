@@ -270,3 +270,77 @@ def test_bau_full_60_months_raw_whole_percent_reproduces_official_average():
     assert result.replacement_rate == 75
     assert result.estimated_pension == 14338385
     assert result.one_time_retirement_allowance.total_allowance_amount == 57353538
+
+
+def test_r17_single_row_dual_raw_percent_without_repetition():
+    """R1.7 must normalize one row even when there is no repeated % pattern."""
+    payload = {
+        "person": {"date_of_birth": "1970-10-21", "sex": "female"},
+        "pension_start_month": "2026-07",
+        "retirement_case": "normal",
+        "contributions": [{
+            "from_month": "2021-09", "to_month": "2022-01",
+            "participation_status": "contributed",
+            "contribution_type": "compulsory_state",
+            "basis_input_type": "mau_07_sbh_components",
+            "sbh_components": {
+                "unit": "coefficient", "base_value": "4.98", "position_allowance": "0.4",
+                "seniority_beyond_frame_allowance": "0.05",
+                "professional_seniority_allowance": "0.29"
+            }
+        }]
+    }
+    validate_v2_payload(payload)
+    req = to_internal(payload)
+    comp = req.contributions[0].sbh_components
+    assert comp.seniority_beyond_frame_allowance == Decimal("0.2490")
+    assert comp.professional_seniority_allowance == Decimal("1.632410")
+
+
+def test_r17_single_row_explicit_percent_with_whole_numbers():
+    payload = {
+        "person": {"date_of_birth": "1970-10-21", "sex": "female"},
+        "pension_start_month": "2026-07",
+        "retirement_case": "normal",
+        "contributions": [{
+            "from_month": "2021-09", "to_month": "2022-01",
+            "participation_status": "contributed",
+            "contribution_type": "compulsory_state",
+            "basis_input_type": "mau_07_sbh_components",
+            "source_unit": "percent",
+            "sbh_components": {
+                "unit": "coefficient", "base_value": "4.98", "position_allowance": "0.4",
+                "seniority_beyond_frame_allowance": "5",
+                "professional_seniority_allowance": "29"
+            }
+        }]
+    }
+    validate_v2_payload(payload)
+    req = to_internal(payload)
+    comp = req.contributions[0].sbh_components
+    assert comp.seniority_beyond_frame_allowance == Decimal("0.2490")
+    assert comp.professional_seniority_allowance == Decimal("1.632410")
+
+
+def test_r17_mixed_raw_percent_and_normalized_component_in_same_row():
+    payload = {
+        "person": {"date_of_birth": "1970-10-21", "sex": "female"},
+        "pension_start_month": "2026-07",
+        "retirement_case": "normal",
+        "contributions": [{
+            "from_month": "2021-09", "to_month": "2022-01",
+            "participation_status": "contributed",
+            "contribution_type": "compulsory_state",
+            "basis_input_type": "mau_07_sbh_components",
+            "sbh_components": {
+                "unit": "coefficient", "base_value": "4.98", "position_allowance": "0.4",
+                "seniority_beyond_frame_allowance": "0.2490",
+                "professional_seniority_allowance": "0.29"
+            }
+        }]
+    }
+    validate_v2_payload(payload)
+    req = to_internal(payload)
+    comp = req.contributions[0].sbh_components
+    assert comp.seniority_beyond_frame_allowance == Decimal("0.2490")
+    assert comp.professional_seniority_allowance == Decimal("1.632410")

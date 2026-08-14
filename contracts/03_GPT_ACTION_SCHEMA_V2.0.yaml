@@ -406,6 +406,7 @@ components:
           - type: string
           - type: 'null'
           title: Source Unit
+          description: Khi TN VK/TN Nghề đọc từ hồ sơ dưới dạng %, gửi percent (hoặc %) và giữ giá trị % ở sbh_components; API sẽ quy đổi đúng công thức. Nếu đã gửi component hệ số đã chuẩn hóa thì dùng coefficient hoặc bỏ trống.
         source_row_id:
           anyOf:
           - type: string

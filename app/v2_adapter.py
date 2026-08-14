@@ -52,91 +52,141 @@ def _as_decimal(value):
     return Decimal(str(value)) if value is not None else Decimal("0")
 
 
-def _is_percent_token(value) -> bool:
-    """Conservative detector for raw percentage values such as 0.05..0.12."""
-    if value in (None, "", 0, "0", 0.0, "0.0"):
-        return False
+def _parse_percent_token(value):
+    """Return percentage fraction for raw % representations, else None.
+
+    Accepted raw forms are deliberately narrow:
+      5       -> 0.05
+      0.05    -> 0.05
+      "5%"    -> 0.05 (for tolerant internal clients; public schema may omit %)
+      "0.05%" -> 0.0005
+
+    A normalized coefficient such as 0.2030, 0.2490, 0.3248 or 1.632410
+    is NOT a percent token.
+    """
+    if value in (None, ""):
+        return None
+    text = str(value).strip().replace(",", ".")
+    if not text:
+        return None
+    has_pct = text.endswith("%")
+    if has_pct:
+        text = text[:-1].strip()
     try:
-        d = Decimal(str(value))
+        d = Decimal(text)
     except Exception:
-        return False
-    # Supported raw percentage representations:
-    #   0.05 / 0.29 / 0.34  (decimal fraction)
-    #   5 / 29 / 34          (whole percent)
-    # Do NOT convert normalized coefficient amounts such as 0.2030, 0.3248
-    # or 0.4872. The decimal-fraction form is therefore restricted to
-    # integer percentages, while whole-percent form is restricted to the
-    # allowance fields where values above 1 are not valid normalized
-    # coefficient allowances in the Mẫu 07/SBH model.
-    if Decimal("0.01") <= d <= Decimal("1"):
-        return (d * 100) == (d * 100).to_integral_value()
-    return Decimal("1") < d <= Decimal("100") and d == d.to_integral_value()
+        return None
+    if d < 0:
+        return None
+    if has_pct:
+        return d / Decimal("100")
+    # 0.05 = 5%; 0.29 = 29%; etc. Only exact integer hundredths are
+    # recognized. This intentionally excludes normalized coefficients such
+    # as 0.2030, 0.2490, 0.3248 and 1.632410.
+    if Decimal("0.01") <= d <= Decimal("1") and (d * 100) == (d * 100).to_integral_value():
+        return d
+    # Whole-percent representation 5, 29, 34. Values > 1 are never treated
+    # as normalized coefficient components in this model.
+    if Decimal("1") < d <= Decimal("100") and d == d.to_integral_value():
+        return d / Decimal("100")
+    return None
+
+
+def _is_percent_token(value) -> bool:
+    return _parse_percent_token(value) is not None
 
 
 def _normalize_percentage_components(payload: dict) -> None:
-    """Normalize percentage-form allowance input before internal conversion.
+    """Normalize raw TN VK/TN Nghề percentages before internal calculation.
 
-    Public contract keeps sbh_components in coefficient units. GPT/clients may
-    nevertheless supply raw percentage fractions (e.g. 0.05 for 5%). We support
-    two safe paths:
-      1) explicit source_unit=percent/%/percentage;
-      2) conservative multi-row detection for percentage-like values in TN VK/TN Nghề
-         fields, requiring at least two matching rows when source_unit is absent.
-         This covers both 0.05/0.29 and 5/29 representations.
+    R1.7 makes the rule deterministic per row. It no longer requires two or
+    more rows to contain percentage-like values. This fixes the BAU_154 failure
+    mode where a GPT payload can mix raw percentages and already-normalized
+    coefficient components.
 
-    Already normalized coefficient values such as 0.3248 are never converted by
-    the heuristic.
+    Priority:
+      1) source_unit=percent/%/percentage/pct -> always interpret allowance
+         fields as percentages.
+      2) source_unit=coefficient -> preserve already-normalized components.
+      3) source_unit absent/unknown -> recognize only narrow percentage tokens
+         (0.05, 0.29, 5, 29, etc.); values such as 0.2030/0.2490/1.632410 are
+         preserved.
+
+    TN VK is calculated first:
+        % TN VK × Mức đóng
+    TN Nghề is then calculated from:
+        % TN Nghề × (Mức đóng + Chức vụ + TN VK)
     """
+    audit = []
     rows = payload.get("contributions") or []
-    candidate_counts = {"seniority_beyond_frame_allowance": 0,
-                        "professional_seniority_allowance": 0}
-    for row in rows:
+
+    for idx, row in enumerate(rows):
         sbh = row.get("sbh_components")
         if not isinstance(sbh, dict) or sbh.get("unit") != "coefficient":
             continue
-        for field in candidate_counts:
-            if _is_percent_token(sbh.get(field)):
-                candidate_counts[field] += 1
-
-    for row in rows:
-        sbh = row.get("sbh_components")
-        if not isinstance(sbh, dict) or sbh.get("unit") != "coefficient":
-            continue
-
-        source_unit = str(row.get("source_unit") or sbh.get("source_unit") or "").strip().lower()
-        explicit_percent = source_unit in {"%", "percent", "percentage", "pct"}
 
         base = _as_decimal(sbh.get("base_value"))
         position = _as_decimal(sbh.get("position_allowance"))
         raw_tnvk = _as_decimal(sbh.get("seniority_beyond_frame_allowance"))
         raw_tnnghe = _as_decimal(sbh.get("professional_seniority_allowance"))
 
-        # If source_unit explicitly says percent, values may be written as 5 or
-        # 0.05. Convert both supported representations to a coefficient amount.
-        tnvk_is_pct = explicit_percent and raw_tnvk != 0
-        tnnghe_is_pct = explicit_percent and raw_tnnghe != 0
+        source_unit = str(row.get("source_unit") or sbh.get("source_unit") or "").strip().lower()
+        explicit_percent = source_unit in {"%", "percent", "percentage", "pct"}
+        explicit_coefficient = source_unit in {"coefficient", "coef", "he_so", "hệ số"}
+        source_text = str(row.get("source_text") or "")
 
-        # Conservative compatibility path for the observed GPT failure mode:
-        # repeated raw 5%..12% values sent as 0.05..0.12.
-        if not explicit_percent:
-            tnvk_is_pct = candidate_counts["seniority_beyond_frame_allowance"] >= 2 and _is_percent_token(sbh.get("seniority_beyond_frame_allowance"))
-            tnnghe_is_pct = candidate_counts["professional_seniority_allowance"] >= 2 and _is_percent_token(sbh.get("professional_seniority_allowance"))
+        tnvk_pct = None if explicit_coefficient else _parse_percent_token(sbh.get("seniority_beyond_frame_allowance"))
+        tnnghe_pct = None if explicit_coefficient else _parse_percent_token(sbh.get("professional_seniority_allowance"))
 
-        if tnvk_is_pct:
-            pct = raw_tnvk if raw_tnvk <= 1 else raw_tnvk / Decimal("100")
-            sbh["seniority_beyond_frame_allowance"] = str(base * pct)
-            row["source_unit"] = "percent"
-            row["source_value"] = str(raw_tnvk * 100 if raw_tnvk <= 1 else raw_tnvk)
-            raw_tnvk = base * pct
+        # If the source explicitly says percent, a non-percent numeric value is
+        # invalid rather than silently guessed. This prevents a hidden basis error.
+        if explicit_percent:
+            if raw_tnvk != 0 and tnvk_pct is None:
+                raise ValueError(f"contributions[{idx}].sbh_components.seniority_beyond_frame_allowance: source_unit=percent nhưng giá trị không phải % hợp lệ")
+            if raw_tnnghe != 0 and tnnghe_pct is None:
+                raise ValueError(f"contributions[{idx}].sbh_components.professional_seniority_allowance: source_unit=percent nhưng giá trị không phải % hợp lệ")
 
-        if tnnghe_is_pct:
-            pct = raw_tnnghe if raw_tnnghe <= 1 else raw_tnnghe / Decimal("100")
-            # TN Nghề is calculated on Mức đóng + Chức vụ + TN VK.
-            subtotal = base + position + raw_tnvk
-            sbh["professional_seniority_allowance"] = str(subtotal * pct)
-            row["source_unit"] = "percent"
-            row["source_value"] = str(raw_tnnghe * 100 if raw_tnnghe <= 1 else raw_tnnghe)
+        # Optional source text is useful when OCR preserved the '%' marker.
+        if not explicit_coefficient and not explicit_percent and "%" in source_text:
+            if raw_tnvk != 0 and tnvk_pct is None:
+                tnvk_pct = _parse_percent_token(f"{sbh.get('seniority_beyond_frame_allowance')}%")
+            if raw_tnnghe != 0 and tnnghe_pct is None:
+                tnnghe_pct = _parse_percent_token(f"{sbh.get('professional_seniority_allowance')}%")
 
+        applied = []
+        normalized_tnvk = raw_tnvk
+        normalized_tnnghe = raw_tnnghe
+
+        # TN VK first.
+        if tnvk_pct is not None and raw_tnvk != 0:
+            normalized_tnvk = base * tnvk_pct
+            sbh["seniority_beyond_frame_allowance"] = str(normalized_tnvk)
+            applied.append("TN VK = % × Mức đóng")
+
+        # TN Nghề second, using the normalized TN VK.
+        if tnnghe_pct is not None and raw_tnnghe != 0:
+            subtotal = base + position + normalized_tnvk
+            normalized_tnnghe = subtotal * tnnghe_pct
+            sbh["professional_seniority_allowance"] = str(normalized_tnnghe)
+            applied.append("TN Nghề = % × (Mức đóng + Chức vụ + TN VK)")
+
+        audit.append({
+            "source_row_id": row.get("source_row_id") or str(idx + 1),
+            "from_month": row.get("from_month"),
+            "to_month": row.get("to_month"),
+            "source_unit": source_unit or None,
+            "source_text": source_text or None,
+            "raw_tnvk": str(raw_tnvk),
+            "raw_tnnghe": str(raw_tnnghe),
+            "tnvk_percent": str(tnvk_pct * 100) if tnvk_pct is not None and raw_tnvk != 0 else None,
+            "tnnghe_percent": str(tnnghe_pct * 100) if tnnghe_pct is not None and raw_tnnghe != 0 else None,
+            "normalized_tnvk": str(normalized_tnvk),
+            "normalized_tnnghe": str(normalized_tnnghe),
+            "normalization_applied": bool(applied),
+            "normalization_rule": "; ".join(applied) if applied else "Giữ nguyên component đã chuẩn hóa"
+        })
+
+    payload["_r17_normalization_audit"] = audit
 
 def to_internal(payload: dict) -> PensionCalculationRequest:
     _normalize_percentage_components(payload)
@@ -312,13 +362,30 @@ def build_v2_response(payload, result, diagnostics, req):
         }
 
     basis_audit = []
+    normalization_audit = {x.get("source_row_id"): x for x in (payload.get("_r17_normalization_audit") or [])}
     for i,c in enumerate(payload["contributions"]):
         if c.get("participation_status", "contributed") == "not_participating": continue
         sbh = c.get("sbh_components") or {}
         if c.get("basis_input_type", "total_vnd") == "mau_07_sbh_components":
             vals = {k: str(sbh.get(k, "0")) for k in ["base_value","position_allowance","seniority_beyond_frame_allowance","professional_seniority_allowance","regional_allowance","other_allowance","reelection_allowance"]}
             total = sum(Decimal(v) for v in vals.values())
-            basis_audit.append({"source_row_id":c.get("source_row_id") or str(i+1),"from_month":c["from_month"],"to_month":c["to_month"],"component_unit":sbh.get("unit","vnd"),"base_value":vals["base_value"],"position_allowance":vals["position_allowance"],"seniority_beyond_frame_allowance":vals["seniority_beyond_frame_allowance"],"professional_seniority_allowance":vals["professional_seniority_allowance"],"regional_allowance":vals["regional_allowance"],"other_allowance":vals["other_allowance"],"reelection_allowance":vals["reelection_allowance"],"allowance_total":str(total-dec(vals["base_value"])),"total_component_value":str(total),"formula_vi":"Mức đóng + Chức vụ + TN VK + TN Nghề + Khu vực + Khác + Tái cử"})
+            row_id = c.get("source_row_id") or str(i+1)
+            audit_item = {"source_row_id":row_id,"from_month":c["from_month"],"to_month":c["to_month"],"component_unit":sbh.get("unit","vnd"),"base_value":vals["base_value"],"position_allowance":vals["position_allowance"],"seniority_beyond_frame_allowance":vals["seniority_beyond_frame_allowance"],"professional_seniority_allowance":vals["professional_seniority_allowance"],"regional_allowance":vals["regional_allowance"],"other_allowance":vals["other_allowance"],"reelection_allowance":vals["reelection_allowance"],"allowance_total":str(total-dec(vals["base_value"])),"total_component_value":str(total),"formula_vi":"Mức đóng + Chức vụ + TN VK + TN Nghề + Khu vực + Khác + Tái cử"}
+            norm = normalization_audit.get(row_id)
+            if norm:
+                audit_item.update({
+                    "source_unit": norm.get("source_unit"),
+                    "source_text": norm.get("source_text"),
+                    "raw_tnvk": norm.get("raw_tnvk"),
+                    "raw_tnnghe": norm.get("raw_tnnghe"),
+                    "tnvk_percent": norm.get("tnvk_percent"),
+                    "tnnghe_percent": norm.get("tnnghe_percent"),
+                    "normalized_tnvk": norm.get("normalized_tnvk"),
+                    "normalized_tnnghe": norm.get("normalized_tnnghe"),
+                    "normalization_applied": norm.get("normalization_applied"),
+                    "normalization_rule": norm.get("normalization_rule"),
+                })
+            basis_audit.append(audit_item)
 
     response = {
         "calculation_id": result.calculation.calculation_id,

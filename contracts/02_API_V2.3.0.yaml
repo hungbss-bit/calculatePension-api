@@ -278,6 +278,54 @@ components:
         formula_vi:
           type: string
           title: Formula Vi
+        source_unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Unit
+        source_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Text
+        raw_tnvk:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Raw TN VK
+        raw_tnnghe:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Raw TN Nghề
+        tnvk_percent:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: TN VK Percent
+        tnnghe_percent:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: TN Nghề Percent
+        normalized_tnvk:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Normalized TN VK
+        normalized_tnnghe:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Normalized TN Nghề
+        normalization_applied:
+          type: boolean
+          default: false
+        normalization_rule:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Normalization Rule
       type: object
       required:
       - from_month

@@ -18,6 +18,7 @@ from .v2_adapter import validate_v2_payload, to_internal, build_v2_response
 
 API_VERSION = "2.3.0"
 ACTION_SCHEMA_VERSION = "2.0.0"
+ADAPTER_RELEASE = "R1.7"
 MAX_REQUEST_BODY_BYTES = int(os.getenv("MAX_REQUEST_BODY_BYTES", "2097152"))
 
 app = FastAPI(
@@ -83,11 +84,11 @@ def privacy_policy() -> HTMLResponse:
 
 @app.get("/health", include_in_schema=False)
 def health() -> dict[str, str]:
-    return {"status":"ok","service":"calculatePension","version":API_VERSION,"action_schema_version":ACTION_SCHEMA_VERSION,"schema_version":"2.3.0","engine_version":"1.0.10-rc","policy_version":"VN-BHXH-PENSION-V1.0-2026"}
+    return {"status":"ok","service":"calculatePension","version":API_VERSION,"action_schema_version":ACTION_SCHEMA_VERSION,"schema_version":"2.3.0","engine_version":"1.0.10-rc","adapter_release":ADAPTER_RELEASE,"policy_version":"VN-BHXH-PENSION-V1.0-2026"}
 
 @app.get("/version", include_in_schema=False)
 def version() -> dict[str, str]:
-    return {"api_version":API_VERSION,"action_schema_version":ACTION_SCHEMA_VERSION,"engine_version":"1.0.10-rc","policy_version":"VN-BHXH-PENSION-V1.0-2026","contract":"02_API_V2.3.0.yaml"}
+    return {"api_version":API_VERSION,"action_schema_version":ACTION_SCHEMA_VERSION,"engine_version":"1.0.10-rc","adapter_release":ADAPTER_RELEASE,"policy_version":"VN-BHXH-PENSION-V1.0-2026","contract":"02_API_V2.3.0.yaml"}
 
 @app.get("/v1/authDiagnostics", include_in_schema=False)
 def auth_diagnostics(x_api_key: str | None = Header(default=None, alias="X-API-Key")):
@@ -95,7 +96,7 @@ def auth_diagnostics(x_api_key: str | None = Header(default=None, alias="X-API-K
 
 @app.get("/v1/capabilities", include_in_schema=False, dependencies=[Depends(verify_api_key)])
 def capabilities():
-    return {"api_version":API_VERSION,"action_schema_version":ACTION_SCHEMA_VERSION,"supports":["validateContributionHistory","calculatePension","mau_07_sbh_components","nd154_2025_streamlining"],"scope_excludes":["armed_forces"],"nd154_state_budget_allowance_excluded":True}
+    return {"api_version":API_VERSION,"action_schema_version":ACTION_SCHEMA_VERSION,"adapter_release":ADAPTER_RELEASE,"supports":["validateContributionHistory","calculatePension","mau_07_sbh_components","nd154_2025_streamlining"],"scope_excludes":["armed_forces"],"nd154_state_budget_allowance_excluded":True}
 
 
 def _read_payload(request: Request):
