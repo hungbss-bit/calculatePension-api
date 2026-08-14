@@ -114,9 +114,15 @@ async def validate_history(request: Request):
         total = diag.response.normalized_summary.total_contribution_months if diag.response.normalized_summary else 0
         excluded = diag.response.normalized_summary.excluded_bhtn_months if diag.response.normalized_summary else 0
         avg_months = 0
+        credited_duration_only_months = 0
         if diag.response.validation:
             _, _, avg_months, _ = calculate_average_salary(internal, expand_records(internal))
-        return {"valid_for_calculation":diag.response.validation,"total_unique_months":total,"average_basis_months":avg_months,"credited_duration_only_months":0,"excluded_non_participation_months":excluded,"gaps":[],"overlaps":[],"issues":[]}
+            credited_duration_only_months = sum(
+                (r.to_date.year - r.from_date.year) * 12 + (r.to_date.month - r.from_date.month) + 1
+                for r in internal.contributions
+                if r.participation_status.value == "credited_duration_only"
+            )
+        return {"valid_for_calculation":diag.response.validation,"total_unique_months":total,"average_basis_months":avg_months,"credited_duration_only_months":credited_duration_only_months,"excluded_non_participation_months":excluded,"gaps":[],"overlaps":[],"issues":list(diag.response.warnings)}
     except ValueError as exc:
         return JSONResponse(status_code=422, content={"detail":[{"loc":["body"],"msg":str(exc),"type":"value_error"}]})
     except BusinessError as exc:
