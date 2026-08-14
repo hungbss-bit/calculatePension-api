@@ -54,6 +54,25 @@ def test_v2_http_contract_returns_v2_response():
     assert body['early_retirement_policy_result']['no_reduction_applied'] is True
 
 
+def test_v2_adapter_auto_normalizes_pre1995_no_salary_row_to_duration_only():
+    p=v2_bau()
+    p["contributions"] = [
+        {
+            "from_month": "1993-06", "to_month": "1994-12",
+            "participation_status": "contributed",
+            "contribution_type": "compulsory_state"
+        },
+        *p["contributions"][1:]
+    ]
+    req=to_internal(p)
+    first=req.contributions[0]
+    assert first.participation_status.value == "credited_duration_only"
+    assert first.duration_only_reason.value == "pre1995_no_salary_or_living_allowance"
+    assert first.basis_input_type is None
+    assert first.monthly_basis_vnd is None
+    assert first.sbh_components is None
+
+
 def test_v2_adapter_pre1995_duration_only_does_not_carry_salary_basis():
     p=v2_bau()
     p["contributions"] = [

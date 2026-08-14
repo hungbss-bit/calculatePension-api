@@ -67,10 +67,52 @@ def to_internal(payload: dict) -> PensionCalculationRequest:
         status = row.get("participation_status", "contributed")
         ctype = row.get("contribution_type")
         basis_type = row.get("basis_input_type", "total_vnd")
+
+        # PRE-1995: Mẫu 07/SBH có thể chỉ xác nhận thời gian đóng mà không có
+        # căn cứ tiền lương/hệ số. Một số GPT/clients vẫn gửi một object
+        # sbh_components toàn số 0 để thỏa schema. Object đó KHÔNG phải là
+        # một căn cứ tiền lương thực tế và phải được coi như "không có basis".
+        sbh_raw = row.get("sbh_components")
+        sbh_has_basis = False
+        if isinstance(sbh_raw, dict):
+            numeric_keys = [
+                "base_value", "position_allowance",
+                "seniority_beyond_frame_allowance",
+                "professional_seniority_allowance", "regional_allowance",
+                "other_allowance", "reelection_allowance"
+            ]
+            sbh_has_basis = any(
+                sbh_raw.get(k) not in (None, "", 0, "0", 0.0, "0.0")
+                for k in numeric_keys
+            )
+        elif sbh_raw is not None:
+            sbh_has_basis = True
+
+        has_real_basis = (
+            row.get("monthly_basis_vnd") is not None
+            or sbh_has_basis
+            or row.get("coefficient_override") is not None
+        )
+
+        # Treat PRE-1995 rows without a real salary basis as
+        # credited-duration-only. This preserves the duration for pension
+        # eligibility/rate while excluding the row from average salary.
+        if (
+            status == "contributed"
+            and row["to_month"] < "1995-01"
+            and not has_real_basis
+        ):
+            status = "credited_duration_only"
+            if not row.get("duration_only_reason"):
+                row = dict(row)
+                row["duration_only_reason"] = "pre1995_no_salary_or_living_allowance"
         monthly = row.get("monthly_basis_vnd")
         sbh = row.get("sbh_components")
 
-        if basis_type == "mau_07_sbh_components":
+        if status == "credited_duration_only":
+            internal_basis_type = None
+            components = None
+        elif basis_type == "mau_07_sbh_components":
             internal_basis_type = BasisInputType.mau_07_sbh_components
             if sbh is None:
                 raise ValueError("basis_input_type=mau_07_sbh_components nhưng thiếu sbh_components")
