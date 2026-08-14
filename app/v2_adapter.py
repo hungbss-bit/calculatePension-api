@@ -121,6 +121,10 @@ def _normalize_percentage_components(payload: dict) -> None:
     rows = payload.get("contributions") or []
 
     for idx, row in enumerate(rows):
+        # PRE-1995 values are audit-only in R1.9 and must not be reinterpreted
+        # as allowance percentages or normalized salary components.
+        if row.get("to_month") and row["to_month"] < "1995-01":
+            continue
         sbh = row.get("sbh_components")
         if not isinstance(sbh, dict) or sbh.get("unit") != "coefficient":
             continue
@@ -209,44 +213,23 @@ def to_internal(payload: dict) -> PensionCalculationRequest:
         ctype = row.get("contribution_type")
         basis_type = row.get("basis_input_type", "total_vnd")
 
-        # PRE-1995: Mẫu 07/SBH có thể chỉ xác nhận thời gian đóng mà không có
-        # căn cứ tiền lương/hệ số. Một số GPT/clients vẫn gửi một object
-        # sbh_components toàn số 0 để thỏa schema. Object đó KHÔNG phải là
-        # một căn cứ tiền lương thực tế và phải được coi như "không có basis".
-        sbh_raw = row.get("sbh_components")
-        sbh_has_basis = False
-        if isinstance(sbh_raw, dict):
-            numeric_keys = [
-                "base_value", "position_allowance",
-                "seniority_beyond_frame_allowance",
-                "professional_seniority_allowance", "regional_allowance",
-                "other_allowance", "reelection_allowance"
-            ]
-            sbh_has_basis = any(
-                sbh_raw.get(k) not in (None, "", 0, "0", 0.0, "0.0")
-                for k in numeric_keys
-            )
-        elif sbh_raw is not None:
-            sbh_has_basis = True
-
-        has_real_basis = (
-            row.get("monthly_basis_vnd") is not None
-            or sbh_has_basis
-            or row.get("coefficient_override") is not None
-        )
-
-        # Treat PRE-1995 rows without a real salary basis as
-        # credited-duration-only. This preserves the duration for pension
-        # eligibility/rate while excluding the row from average salary.
-        if (
-            status == "contributed"
-            and row["to_month"] < "1995-01"
-            and not has_real_basis
-        ):
-            status = "credited_duration_only"
-            if not row.get("duration_only_reason"):
-                row = dict(row)
-                row["duration_only_reason"] = "pre1995_no_salary_or_living_allowance"
+        # R1.9 PRE-1995 canonical rule:
+        # Every confirmed BHXH participation period ending before 01/1995 is
+        # duration-only for pension-rate duration and is excluded from the
+        # average basis. This is true whether the source salary cell is blank,
+        # coefficient-like (e.g. 1.72) or VND-like (e.g. 262). Source values may
+        # remain in source_value/source_text for audit, but no salary basis is
+        # carried into the internal calculation model.
+        is_pre1995 = row["to_month"] < "1995-01"
+        if is_pre1995 and status != "not_participating":
+            row = dict(row)
+            if status == "contributed":
+                status = "credited_duration_only"
+            if status == "credited_duration_only" and row.get("duration_only_reason") not in {
+                "pre1995_no_salary_or_living_allowance",
+                "pre1995_duration_excluded_from_average_basis",
+            }:
+                row["duration_only_reason"] = "pre1995_duration_excluded_from_average_basis"
         monthly = row.get("monthly_basis_vnd")
         sbh = row.get("sbh_components")
 
@@ -280,10 +263,9 @@ def to_internal(payload: dict) -> PensionCalculationRequest:
 
         avg_inc = None
         avg_reason = None
-        if status == "credited_duration_only" or row["to_month"] < "1995-01":
+        if is_pre1995:
             avg_inc = AverageInclusion.excluded
-            if status == "credited_duration_only" or row["to_month"] < "1995-01":
-                avg_reason = AverageExclusionReason.pre1995_policy
+            avg_reason = AverageExclusionReason.pre1995_policy
 
         contributions.append(Contribution(
             from_month=row["from_month"], to_month=row["to_month"],
@@ -298,7 +280,12 @@ def to_internal(payload: dict) -> PensionCalculationRequest:
                 if status == "credited_duration_only"
                 else internal_basis_type if status != "not_participating" else None
             ),
-            monthly_basis_vnd=(dec(monthly) if monthly is not None else None), sbh_components=components,
+            monthly_basis_vnd=(
+                None
+                if status == "credited_duration_only"
+                else dec(monthly) if monthly is not None else None
+            ),
+            sbh_components=components,
             average_inclusion=avg_inc,
             average_exclusion_reason=avg_reason,
             after_retirement_age_period=False,

@@ -39,7 +39,12 @@ class ParticipationStatus(str, Enum):
 
 
 class DurationOnlyReason(str, Enum):
+    # Legacy reason kept for backward compatibility with R1.8 and earlier clients.
     pre1995_no_salary_or_living_allowance = "pre1995_no_salary_or_living_allowance"
+    # Canonical R1.9 reason: every confirmed pre-1995 BHXH participation period is
+    # duration-only for pension-rate duration and is excluded from average basis,
+    # regardless of whether the source cell is blank, coefficient-like, or VND-like.
+    pre1995_duration_excluded_from_average_basis = "pre1995_duration_excluded_from_average_basis"
     maternity_leave = "maternity_leave"
 
 

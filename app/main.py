@@ -18,7 +18,7 @@ from .v2_adapter import validate_v2_payload, to_internal, build_v2_response
 
 API_VERSION = "2.3.0"
 ACTION_SCHEMA_VERSION = "2.0.0"
-ADAPTER_RELEASE = "R1.7"
+ADAPTER_RELEASE = "R1.9"
 MAX_REQUEST_BODY_BYTES = int(os.getenv("MAX_REQUEST_BODY_BYTES", "2097152"))
 
 app = FastAPI(
@@ -116,10 +116,15 @@ async def validate_history(request: Request):
         avg_months = 0
         credited_duration_only_months = 0
         if diag.response.validation:
-            _, _, avg_months, _ = calculate_average_salary(internal, expand_records(internal))
+            records = expand_records(internal)
+            _, _, avg_months, _ = calculate_average_salary(internal, records)
+            # Count normalized monthly records instead of reading non-existent
+            # Contribution.to_date/from_date attributes. The old R1.8 code raised
+            # AttributeError as soon as a credited_duration_only PRE-1995 row was
+            # present, which surfaced to GPT as INTERNAL_CALCULATION_ERROR.
             credited_duration_only_months = sum(
-                (r.to_date.year - r.from_date.year) * 12 + (r.to_date.month - r.from_date.month) + 1
-                for r in internal.contributions
+                1
+                for r in records
                 if r.participation_status.value == "credited_duration_only"
             )
         return {"valid_for_calculation":diag.response.validation,"total_unique_months":total,"average_basis_months":avg_months,"credited_duration_only_months":credited_duration_only_months,"excluded_non_participation_months":excluded,"gaps":[],"overlaps":[],"issues":list(diag.response.warnings)}

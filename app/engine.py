@@ -295,14 +295,17 @@ def validate_request(request: PensionCalculationRequest) -> ValidationDiagnostic
         elif period.participation_status == ParticipationStatus.credited_duration_only:
             reason = period.duration_only_reason
 
-            if reason == DurationOnlyReason.pre1995_no_salary_or_living_allowance:
+            if reason in {
+                DurationOnlyReason.pre1995_no_salary_or_living_allowance,
+                DurationOnlyReason.pre1995_duration_excluded_from_average_basis,
+            }:
                 if not is_pre1995:
                     _append(
                         issues,
                         "CREDITED_DURATION_ONLY_AFTER_1994",
                         (
-                            "duration_only_reason=pre1995_no_salary_or_living_allowance "
-                            "chỉ hợp lệ cho thời gian kết thúc trước 01/1995."
+                            "Căn cứ duration-only PRE-1995 chỉ hợp lệ cho thời gian "
+                            "kết thúc trước 01/1995."
                         ),
                         f"{prefix}.participation_status",
                         f"{prefix}.duration_only_reason",
@@ -375,8 +378,9 @@ def validate_request(request: PensionCalculationRequest) -> ValidationDiagnostic
                     issues,
                     "DURATION_ONLY_REASON_REQUIRED",
                     (
-                        "credited_duration_only phải có duration_only_reason="
-                        "pre1995_no_salary_or_living_allowance hoặc maternity_leave."
+                        "credited_duration_only phải có duration_only_reason hợp lệ: "
+                        "pre1995_duration_excluded_from_average_basis, "
+                        "pre1995_no_salary_or_living_allowance (legacy) hoặc maternity_leave."
                     ),
                     f"{prefix}.duration_only_reason",
                 )
@@ -579,10 +583,7 @@ def validate_request(request: PensionCalculationRequest) -> ValidationDiagnostic
                 excluded_months.add(month)
             else:
                 counted_months.add(month)
-                if (
-                    period.participation_status == ParticipationStatus.contributed
-                    and is_pre1995
-                ):
+                if is_pre1995:
                     pre1995_excluded_months += 1
 
     if covered_months:
@@ -667,7 +668,7 @@ def validate_request(request: PensionCalculationRequest) -> ValidationDiagnostic
         )
     if pre1995_excluded_months:
         warnings.append(
-            f"Đã tính {pre1995_excluded_months} tháng contributed trước 01/1995 vào thời gian nhưng loại khỏi mức bình quân."
+            f"Đã tính {pre1995_excluded_months} tháng tham gia BHXH trước 01/1995 vào thời gian nhưng loại toàn bộ mức/hệ số nguồn khỏi mức bình quân."
         )
 
     validation = not issues

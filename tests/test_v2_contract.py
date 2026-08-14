@@ -67,7 +67,7 @@ def test_v2_adapter_auto_normalizes_pre1995_no_salary_row_to_duration_only():
     req=to_internal(p)
     first=req.contributions[0]
     assert first.participation_status.value == "credited_duration_only"
-    assert first.duration_only_reason.value == "pre1995_no_salary_or_living_allowance"
+    assert first.duration_only_reason.value == "pre1995_duration_excluded_from_average_basis"
     assert first.basis_input_type is None
     assert first.monthly_basis_vnd is None
     assert first.sbh_components is None
@@ -106,3 +106,45 @@ def test_v2_response_validates_against_public_response_schema():
         if isinstance(obj, list): return [resolve(v) for v in obj]
         return obj
     Draft202012Validator(resolve(schemas["PensionResponse"])).validate(body)
+
+
+def test_validate_endpoint_accepts_generic_pre1995_duration_only_with_raw_trace():
+    p = v2_bau()
+    p["contributions"] = [
+        {
+            "from_month": "1990-08",
+            "to_month": "1993-03",
+            "participation_status": "credited_duration_only",
+            "duration_only_reason": "pre1995_duration_excluded_from_average_basis",
+            "contribution_type": "compulsory_state",
+            "source_text": "blank",
+        },
+        {
+            "from_month": "1993-04",
+            "to_month": "1994-12",
+            "participation_status": "credited_duration_only",
+            "duration_only_reason": "pre1995_duration_excluded_from_average_basis",
+            "contribution_type": "compulsory_state",
+            "source_value": "1,74",
+            "source_unit": "unknown",
+            "source_text": "1,74",
+        },
+        *p["contributions"][1:],
+    ]
+    c = TestClient(app)
+    r = c.post("/v1/validateContributionHistory", json=p)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["valid_for_calculation"] is True
+    assert body["credited_duration_only_months"] == 53
+    assert body["average_basis_months"] == 60
+
+    calc = c.post("/v1/calculatePension", json=p)
+    assert calc.status_code == 200, calc.text
+    result = calc.json()
+    assert result["contribution_summary"]["exact_duration"] == "35 năm 11 tháng"
+    assert result["average_basis"]["basis_months_used"] == 60
+    assert result["average_basis"]["average_monthly_basis_vnd"] == "19117846.0"
+    assert result["pension_rate"]["final_rate_percent"] == "75.0"
+    assert result["estimated_monthly_pension_vnd"] == "14338385.0"
+    assert result["one_time_retirement_allowance_vnd"] == "57353538.0"

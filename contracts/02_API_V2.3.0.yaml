@@ -456,9 +456,11 @@ components:
         participation_status:
           $ref: '#/components/schemas/ParticipationStatus'
           title: Trạng thái tham gia
-          description: contributed = có đóng và dùng tính thời gian, mức bình quân;
-            credited_duration_only = chỉ cộng thời gian, không dùng mức lương; not_participating
-            = không tham gia, loại khỏi toàn bộ phép tính.
+          description: contributed = có đóng; từ 01/01/1995 trở đi dùng tính thời
+            gian và mức bình quân theo Rule; credited_duration_only = chỉ cộng thời
+            gian, không dùng mức lương; not_participating = không tham gia, loại khỏi
+            toàn bộ phép tính. Thời gian tham gia trước 01/01/1995 đã được xác nhận
+            phải được biểu diễn/chuẩn hóa thành credited_duration_only.
           default: contributed
         duration_only_reason:
           anyOf:
@@ -466,8 +468,11 @@ components:
           - type: 'null'
           title: Căn cứ chỉ cộng thời gian
           description: Bắt buộc khi participation_status = credited_duration_only.
-            Hiện API chỉ hỗ trợ thời gian trước 01/01/1995 được công nhận nhưng không
-            hưởng tiền lương hoặc sinh hoạt phí.
+            Với thời gian tham gia BHXH trước 01/01/1995 đã được hồ sơ xác nhận, dùng
+            pre1995_duration_excluded_from_average_basis; chỉ cộng thời gian và loại
+            toàn bộ hệ số/số tiền trước mốc khỏi mức bình quân. Giá trị nguồn nếu có
+            chỉ giữ để audit. pre1995_no_salary_or_living_allowance được giữ để tương
+            thích request cũ.
         monthly_basis_vnd:
           anyOf:
           - type: number
@@ -476,8 +481,9 @@ components:
             pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           - type: 'null'
           title: Tổng mức làm căn cứ đóng (đồng/tháng)
-          description: Chỉ bắt buộc với trạng thái contributed; phải là VND, không
-            phải hệ số thô.
+          description: Chỉ dùng với trạng thái contributed từ 01/01/1995 trở đi;
+            phải là VND, không phải hệ số thô. Thời gian trước 01/01/1995 chỉ cộng
+            thời gian theo duration-only và không gửi giá trị này làm căn cứ bình quân.
         contribution_type:
           anyOf:
           - $ref: '#/components/schemas/ContributionType'
@@ -503,11 +509,13 @@ components:
           anyOf:
           - type: number
           - type: string
-            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            pattern: ^(?!^[-+.,]*$)[+-]?0*\d*(?:[.,]\d*)?$
           - type: 'null'
           title: Giá trị đọc từ hồ sơ
           description: Dùng kiểm toán Mẫu 07/SBH; không tự dùng để tính nếu chưa chuẩn
-            hóa.
+            hóa. Trước 01/01/1995 có thể giữ nguyên giá trị nguồn (ví dụ 1,72 hoặc
+            262) chỉ để audit; không dùng vào mức bình quân và không yêu cầu xác minh
+            đơn vị nếu thời gian tham gia đã được hồ sơ xác nhận.
         source_unit:
           anyOf:
           - type: string
@@ -631,6 +639,7 @@ components:
       type: string
       enum:
       - pre1995_no_salary_or_living_allowance
+      - pre1995_duration_excluded_from_average_basis
       title: DurationOnlyReason
     EarlyRetirementPolicyCode:
       type: string
