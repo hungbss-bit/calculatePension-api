@@ -1,0 +1,37 @@
+AI AGENT HƯU TRÍ V2.1 - TEST REPORT
+
+Ngày kiểm tra: 2026-08-14
+Môi trường kiểm tra: Python 3.12.13
+Môi trường triển khai khai báo: Python 3.13.5
+
+Lệnh:
+  pytest -q
+
+Kết quả:
+  87 passed
+
+Nhóm kiểm tra:
+  - Ground truth hồ sơ mẫu hiện có
+  - Lộ trình tuổi nghỉ hưu
+  - Tháng hưởng liền kề sau tháng đủ tuổi
+  - Quy đổi tháng lẻ và tỷ lệ lương hưu
+  - Suy giảm khả năng lao động 61% và 81%
+  - Khóa chứng cứ NĐ 154/2025/NĐ-CP
+  - Khoảng trống, trùng quá trình, PRE-1995, thai sản, BHTN
+  - Mẫu 07/SBH và TN nghề theo phần trăm
+  - Mức sàn chuyển tiếp
+  - Trợ cấp một lần trước/sau tuổi
+  - Hợp đồng OpenAPI/GPT Action và tham chiếu schema
+  - Xác thực X-API-Key và security headers
+
+Smoke test HTTP qua Uvicorn:
+  - /health: 200, API 2.4.0, Action 2.1.0, Engine 1.1.0
+  - Không có X-API-Key: 401 X_API_KEY_MISSING
+  - Có X-API-Key đúng và hồ sơ hợp lệ: 200, valid_for_calculation=true
+  - Security headers: nosniff, DENY, no-store
+
+Ghi chú:
+  - Có 01 cảnh báo deprecation từ TestClient của thư viện kiểm thử; không phát sinh
+    trong runtime API và không ảnh hưởng kết quả nghiệp vụ.
+  - Chưa chạy Docker image trong môi trường kiểm tra vì runtime không có Docker daemon;
+    Dockerfile đã được kiểm tra tĩnh và contracts đã được bổ sung vào image.

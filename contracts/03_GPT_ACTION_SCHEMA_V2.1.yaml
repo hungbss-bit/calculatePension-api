@@ -1,0 +1,1436 @@
+openapi: 3.1.0
+info:
+  title: GPT Action Schema - AI Agent Hưu trí V2.1
+  description: 'Action contract cho GPT. Nguồn schema nghiệp vụ: calculatePension
+    API 2.4.0. Chỉ expose 2 operation nghiệp vụ đã kiểm thử.'
+  contact:
+    name: Quản trị viên calculatePension
+  version: 2.1.0
+paths:
+  /v1/validateContributionHistory:
+    post:
+      tags:
+      - Kiểm tra hồ sơ
+      summary: Kiểm tra dữ liệu quá trình BHXH trước khi tính
+      description: Kiểm tra xác nhận Mẫu 07/SBH, đơn vị mức đóng, tháng trống, tháng
+        trùng và giai đoạn sau tháng bắt đầu hưởng.
+      operationId: validateContributionHistory
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PensionRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryValidationResult'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - CalculatePensionApiKey: []
+  /v1/calculatePension:
+    post:
+      tags:
+      - Tính lương hưu
+      summary: Dự tính mức lương hưu
+      description: Tính điều kiện hưởng, mức bình quân, tỷ lệ, giảm do nghỉ trước
+        tuổi, lương hưu dự tính và trợ cấp một lần. Dữ liệu Mẫu 07/SBH phải được chuẩn
+        hóa và xác nhận trước.
+      operationId: calculatePension
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PensionRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PensionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - CalculatePensionApiKey: []
+components:
+  schemas:
+    AdjustmentInput:
+      properties:
+        coefficient_year:
+          type: integer
+          enum:
+          - 2026
+          title: Coefficient Year
+          default: 2026
+      type: object
+      title: Bộ hệ số điều chỉnh
+    AverageBasisResult:
+      properties:
+        amount_vnd:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Amount Vnd
+          description: Trường tương thích ngược; bằng average_monthly_basis_vnd.
+        average_monthly_basis_vnd:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Average Monthly Basis Vnd
+          description: Mức bình quân tiền lương/thu nhập làm căn cứ đóng BHXH trước
+            khi nhân tỷ lệ hưởng.
+        basis_months_used:
+          type: integer
+          title: Basis Months Used
+          description: Số tháng dữ liệu tiền lương/thu nhập trực tiếp dùng trong phép
+            bình quân.
+          default: 0
+        method:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Method
+        coefficient_year:
+          type: integer
+          title: Coefficient Year
+        state_average_months_used:
+          type: integer
+          title: State Average Months Used
+          default: 0
+        yearly_breakdown:
+          items:
+            $ref: '#/components/schemas/YearlyAdjustmentBreakdown'
+          type: array
+          title: Yearly Breakdown
+      type: object
+      required:
+      - amount_vnd
+      - average_monthly_basis_vnd
+      - method
+      - coefficient_year
+      title: AverageBasisResult
+    BasisComponentAudit:
+      properties:
+        source_row_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Row Id
+        from_month:
+          type: string
+          title: From Month
+        to_month:
+          type: string
+          title: To Month
+        component_unit:
+          $ref: '#/components/schemas/SbhComponentUnit'
+        base_value:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Base Value
+        position_allowance:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Position Allowance
+        seniority_beyond_frame_allowance:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Seniority Beyond Frame Allowance
+        professional_seniority_allowance:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Professional Seniority Allowance
+        professional_seniority_percent:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Professional Seniority Percent
+        regional_allowance:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Regional Allowance
+        other_allowance:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Other Allowance
+        reelection_allowance:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Reelection Allowance
+        allowance_total:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Allowance Total
+        total_component_value:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Total Component Value
+        base_salary_values_used_vnd:
+          items:
+            type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          type: array
+          title: Base Salary Values Used Vnd
+        monthly_basis_min_vnd:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Monthly Basis Min Vnd
+        monthly_basis_max_vnd:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Monthly Basis Max Vnd
+        formula_vi:
+          type: string
+          title: Formula Vi
+      type: object
+      required:
+      - from_month
+      - to_month
+      - component_unit
+      - base_value
+      - position_allowance
+      - seniority_beyond_frame_allowance
+      - professional_seniority_allowance
+      - regional_allowance
+      - other_allowance
+      - reelection_allowance
+      - allowance_total
+      - total_component_value
+      - formula_vi
+      title: BasisComponentAudit
+    BasisComponents:
+      properties:
+        main_salary_vnd:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Main Salary Vnd
+        salary_allowance_vnd:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Salary Allowance Vnd
+        other_supplement_vnd:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Other Supplement Vnd
+      type: object
+      title: Các thành phần làm căn cứ đóng
+    BasisInputType:
+      type: string
+      enum:
+      - total_vnd
+      - mau_07_sbh_components
+      - salary_coefficient
+      title: BasisInputType
+    CapabilitiesResponse:
+      properties:
+        service:
+          type: string
+          title: Service
+        version:
+          type: string
+          title: Version
+        legal_rule_version:
+          type: string
+          title: Legal Rule Version
+        built_in_coefficient_years:
+          items:
+            type: integer
+          type: array
+          title: Built In Coefficient Years
+        supported_retirement_cases:
+          items:
+            $ref: '#/components/schemas/RetirementCase'
+          type: array
+          title: Supported Retirement Cases
+        manual_review_cases:
+          items:
+            $ref: '#/components/schemas/RetirementCase'
+          type: array
+          title: Manual Review Cases
+        supported_source_documents:
+          items:
+            $ref: '#/components/schemas/SourceDocumentType'
+          type: array
+          title: Supported Source Documents
+        supported_early_retirement_policies:
+          items:
+            $ref: '#/components/schemas/EarlyRetirementPolicyCode'
+          type: array
+          title: Supported Early Retirement Policies
+        armed_forces_supported:
+          type: boolean
+          title: Armed Forces Supported
+          default: false
+        notes:
+          items:
+            type: string
+          type: array
+          title: Notes
+      type: object
+      required:
+      - service
+      - version
+      - legal_rule_version
+      - built_in_coefficient_years
+      - supported_retirement_cases
+      - manual_review_cases
+      - supported_source_documents
+      - notes
+      title: CapabilitiesResponse
+    ConfirmationStatus:
+      type: string
+      enum:
+      - confirmed
+      - unconfirmed
+      - unclear
+      title: ConfirmationStatus
+    ContributionPeriod:
+      properties:
+        from_month:
+          type: string
+          pattern: ^\d{4}-(0[1-9]|1[0-2])$
+          title: Từ tháng
+        to_month:
+          type: string
+          pattern: ^\d{4}-(0[1-9]|1[0-2])$
+          title: Đến tháng
+        participation_status:
+          $ref: '#/components/schemas/ParticipationStatus'
+          title: Trạng thái tham gia
+          description: contributed = có đóng và dùng tính thời gian, mức bình quân;
+            credited_duration_only = chỉ cộng thời gian, không dùng mức lương; not_participating
+            = không tham gia, loại khỏi toàn bộ phép tính.
+          default: contributed
+        duration_only_reason:
+          anyOf:
+          - $ref: '#/components/schemas/DurationOnlyReason'
+          - type: 'null'
+          title: Căn cứ chỉ cộng thời gian
+          description: Bắt buộc khi participation_status = credited_duration_only.
+            Hỗ trợ thời gian trước 01/01/1995 được công nhận nhưng không hưởng tiền
+            lương/sinh hoạt phí và thời gian nghỉ hưởng chế độ thai sản.
+        monthly_basis_vnd:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Tổng mức làm căn cứ đóng (đồng/tháng)
+          description: Chỉ bắt buộc với trạng thái contributed; phải là VND, không
+            phải hệ số thô.
+        contribution_type:
+          anyOf:
+          - $ref: '#/components/schemas/ContributionType'
+          - type: 'null'
+          title: Loại quá trình đóng
+          description: Không bắt buộc khi participation_status = not_participating.
+        basis_input_type:
+          $ref: '#/components/schemas/BasisInputType'
+          title: Kiểu dữ liệu mức đóng
+          default: total_vnd
+        basis_components:
+          anyOf:
+          - $ref: '#/components/schemas/BasisComponents'
+          - type: 'null'
+        sbh_components:
+          anyOf:
+          - $ref: '#/components/schemas/Mau07SbhBasisComponents'
+          - type: 'null'
+          title: Các thành phần cột Mẫu 07/SBH
+          description: Tổng hệ số/mức đóng = Mức đóng + Chức vụ + TN VK + TN Nghề
+            + Khu vực + Khác + Tái cử. Chỉ dùng khi basis_input_type=mau_07_sbh_components.
+        source_value:
+          anyOf:
+          - type: number
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Giá trị đọc từ hồ sơ
+          description: Dùng kiểm toán Mẫu 07/SBH; không tự dùng để tính nếu chưa chuẩn
+            hóa.
+        source_unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Unit
+        source_row_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Row Id
+        source_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Text
+        confirmation_status:
+          $ref: '#/components/schemas/ConfirmationStatus'
+          default: confirmed
+        after_retirement_age_period:
+          type: boolean
+          title: Giai đoạn sau tháng đủ tuổi nghỉ hưu
+          description: Chỉ đánh dấu true cho dòng bắt đầu sau eligibility_achieved_month.
+            Nếu không cung cấp eligibility_achieved_month, API tự suy ra để tính trợ cấp.
+          default: false
+        coefficient_override:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Coefficient Override
+        note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Note
+        hazardous_match_status:
+          $ref: '#/components/schemas/HazardousMatchStatus'
+          default: not_evaluated
+        hazardous_catalog_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hazardous Catalog Code
+        hazardous_catalog_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hazardous Catalog Title
+        hazardous_class:
+          anyOf:
+          - $ref: '#/components/schemas/HazardousClass'
+          - type: 'null'
+        hazardous_legal_document:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hazardous Legal Document
+        hazardous_user_confirmed:
+          type: boolean
+          title: Hazardous User Confirmed
+          default: false
+        qualifying_hazardous:
+          type: boolean
+          title: Qualifying Hazardous
+          default: false
+        qualifying_especially_hazardous:
+          type: boolean
+          title: Qualifying Especially Hazardous
+          default: false
+        qualifying_underground_coal:
+          type: boolean
+          title: Qualifying Underground Coal
+          default: false
+      type: object
+      required:
+      - from_month
+      - to_month
+      title: Giai đoạn trong quá trình BHXH
+    ContributionSummary:
+      properties:
+        total_months:
+          type: integer
+          title: Total Months
+        compulsory_months:
+          type: integer
+          title: Compulsory Months
+        voluntary_months:
+          type: integer
+          title: Voluntary Months
+        average_basis_months:
+          type: integer
+          title: Average Basis Months
+          default: 0
+        credited_duration_only_months:
+          type: integer
+          title: Credited Duration Only Months
+          default: 0
+        excluded_non_participation_months:
+          type: integer
+          title: Excluded Non Participation Months
+          default: 0
+        exact_duration:
+          type: string
+          title: Exact Duration
+        rounded_years_for_rate:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Rounded Years For Rate
+      type: object
+      required:
+      - total_months
+      - compulsory_months
+      - voluntary_months
+      - exact_duration
+      - rounded_years_for_rate
+      title: ContributionSummary
+    ContributionType:
+      type: string
+      enum:
+      - compulsory_state
+      - compulsory_employer
+      - voluntary
+      title: ContributionType
+    DurationOnlyReason:
+      type: string
+      enum:
+      - pre1995_no_salary_or_living_allowance
+      - maternity_leave
+      title: DurationOnlyReason
+    EarlyRetirementPolicyCode:
+      type: string
+      enum:
+      - nd154_2025_streamlining
+      title: EarlyRetirementPolicyCode
+    EarlyRetirementPolicyEvidence:
+      properties:
+        policy_code:
+          $ref: '#/components/schemas/EarlyRetirementPolicyCode'
+        legal_document_number:
+          type: string
+          title: Số nghị định/quyết định áp dụng
+          description: Ví dụ 154/2025/NĐ-CP hoặc quyết định nghỉ hưu của cấp có thẩm
+            quyền.
+        age_reference:
+          $ref: '#/components/schemas/RetirementAgeReference'
+          default: normal_schedule
+        competent_authority_decision_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Competent Authority Decision Number
+        competent_authority_decision_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Competent Authority Decision Date
+        approved_by_competent_authority:
+          type: boolean
+          title: Approved By Competent Authority
+          default: false
+        no_reduction_confirmed:
+          type: boolean
+          title: No Reduction Confirmed
+          default: false
+        confirmation_status:
+          $ref: '#/components/schemas/ConfirmationStatus'
+          default: unconfirmed
+        custom_maximum_early_months:
+          anyOf:
+          - type: integer
+            enum:
+            - 60
+          - type: 'null'
+          title: Custom Maximum Early Months
+        note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Note
+      type: object
+      required:
+      - policy_code
+      - legal_document_number
+      - approved_by_competent_authority
+      - no_reduction_confirmed
+      - confirmation_status
+      title: Căn cứ nghỉ hưu trước tuổi không giảm tỷ lệ
+    EarlyRetirementPolicyResult:
+      properties:
+        policy_code:
+          anyOf:
+          - $ref: '#/components/schemas/EarlyRetirementPolicyCode'
+          - type: 'null'
+        legal_document_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Legal Document Number
+        age_reference:
+          anyOf:
+          - $ref: '#/components/schemas/RetirementAgeReference'
+          - type: 'null'
+        reference_threshold_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Reference Threshold Date
+        early_retirement_months:
+          type: integer
+          title: Early Retirement Months
+          default: 0
+        maximum_early_months:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Maximum Early Months
+        no_reduction_applied:
+          type: boolean
+          title: No Reduction Applied
+          default: false
+        approved_by_competent_authority:
+          type: boolean
+          title: Approved By Competent Authority
+          default: false
+        decision_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Decision Number
+        reasons:
+          items:
+            type: string
+          type: array
+          title: Reasons
+        warnings:
+          items:
+            type: string
+          type: array
+          title: Warnings
+      type: object
+      title: EarlyRetirementPolicyResult
+    EligibilityResult:
+      properties:
+        eligible:
+          type: boolean
+          title: Eligible
+        case:
+          $ref: '#/components/schemas/RetirementCase'
+        regime:
+          $ref: '#/components/schemas/PensionRegime'
+          default: undetermined
+        reasons:
+          items:
+            type: string
+          type: array
+          title: Reasons
+        missing_fields:
+          items:
+            type: string
+          type: array
+          title: Missing Fields
+        required_total_months:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Required Total Months
+        required_compulsory_months:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Required Compulsory Months
+        months_short:
+          type: integer
+          title: Months Short
+          default: 0
+        can_pay_missing_months_once:
+          type: boolean
+          title: Can Pay Missing Months Once
+          default: false
+      type: object
+      required:
+      - eligible
+      - case
+      title: EligibilityResult
+    GapPeriod:
+      properties:
+        from_month:
+          type: string
+          title: From Month
+        to_month:
+          type: string
+          title: To Month
+        months:
+          type: integer
+          title: Months
+      type: object
+      required:
+      - from_month
+      - to_month
+      - months
+      title: GapPeriod
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HazardousClass:
+      type: string
+      enum:
+      - IV
+      - V
+      - VI
+      title: HazardousClass
+    HazardousMatchStatus:
+      type: string
+      enum:
+      - not_evaluated
+      - candidate
+      - confirmed
+      - rejected
+      title: HazardousMatchStatus
+    HazardousMatchedPeriod:
+      properties:
+        source_row_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Row Id
+        from_month:
+          type: string
+          title: From Month
+        to_month:
+          type: string
+          title: To Month
+        months:
+          type: integer
+          title: Months
+        catalog_code:
+          type: string
+          title: Catalog Code
+        catalog_title:
+          type: string
+          title: Catalog Title
+        hazardous_class:
+          anyOf:
+          - $ref: '#/components/schemas/HazardousClass'
+          - type: 'null'
+        legal_document:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Legal Document
+      type: object
+      required:
+      - from_month
+      - to_month
+      - months
+      - catalog_code
+      - catalog_title
+      title: HazardousMatchedPeriod
+    HazardousSummary:
+      properties:
+        confirmed_hazardous_months:
+          type: integer
+          title: Confirmed Hazardous Months
+          default: 0
+        confirmed_especially_hazardous_months:
+          type: integer
+          title: Confirmed Especially Hazardous Months
+          default: 0
+        confirmed_underground_coal_months:
+          type: integer
+          title: Confirmed Underground Coal Months
+          default: 0
+        exact_hazardous_duration:
+          type: string
+          title: Exact Hazardous Duration
+          default: 0 năm 0 tháng
+        confirmed_periods:
+          items:
+            $ref: '#/components/schemas/HazardousMatchedPeriod'
+          type: array
+          title: Confirmed Periods
+      type: object
+      title: HazardousSummary
+    HistoryIssue:
+      properties:
+        code:
+          type: string
+          title: Code
+        severity:
+          type: string
+          title: Severity
+        message_vi:
+          type: string
+          title: Message Vi
+        source_row_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Row Id
+        from_month:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: From Month
+        to_month:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: To Month
+      type: object
+      required:
+      - code
+      - severity
+      - message_vi
+      title: HistoryIssue
+    HistoryValidationResult:
+      properties:
+        valid_for_calculation:
+          type: boolean
+          title: Valid For Calculation
+        total_unique_months:
+          type: integer
+          title: Total Unique Months
+          description: Tổng tháng được tính là thời gian tham gia BHXH.
+        average_basis_months:
+          type: integer
+          title: Average Basis Months
+          description: Số tháng có mức đóng được dùng tính bình quân.
+          default: 0
+        credited_duration_only_months:
+          type: integer
+          title: Credited Duration Only Months
+          description: Số tháng chỉ cộng thời gian, không dùng tính bình quân.
+          default: 0
+        excluded_non_participation_months:
+          type: integer
+          title: Excluded Non Participation Months
+          description: Số tháng ghi rõ không tham gia BHXH và đã loại khỏi phép tính.
+          default: 0
+        gaps:
+          items:
+            $ref: '#/components/schemas/GapPeriod'
+          type: array
+          title: Gaps
+        overlaps:
+          items:
+            type: string
+          type: array
+          title: Overlaps
+        issues:
+          items:
+            $ref: '#/components/schemas/HistoryIssue'
+          type: array
+          title: Issues
+      type: object
+      required:
+      - valid_for_calculation
+      - total_unique_months
+      title: HistoryValidationResult
+    LegalReference:
+      properties:
+        document:
+          type: string
+          title: Document
+        provisions:
+          type: string
+          title: Provisions
+        purpose:
+          type: string
+          title: Purpose
+      type: object
+      required:
+      - document
+      - provisions
+      - purpose
+      title: LegalReference
+    Mau07SbhBasisComponents:
+      properties:
+        unit:
+          $ref: '#/components/schemas/SbhComponentUnit'
+          title: Đơn vị thành phần
+          description: coefficient = hệ số; vnd = đồng/tháng. Tất cả thành phần phải
+            cùng đơn vị.
+        base_value:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Mức đóng gốc
+          description: Giá trị tại cột Mức đóng của Mẫu 07/SBH.
+        position_allowance:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Phụ cấp chức vụ
+          default: '0'
+        seniority_beyond_frame_allowance:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Phụ cấp thâm niên vượt khung
+          default: '0'
+        professional_seniority_allowance:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Phụ cấp thâm niên nghề
+          description: Giá trị đã quy đổi cùng đơn vị với base_value. Không nhập
+            đồng thời với professional_seniority_percent.
+          default: '0'
+        professional_seniority_percent:
+          anyOf:
+          - type: number
+            minimum: 0.0
+            maximum: 100.0
+          - type: string
+            pattern: ^(100(?:\.0+)?|\d{1,2}(?:\.\d+)?)$
+          - type: 'null'
+          title: Tỷ lệ phụ cấp thâm niên nghề (%)
+          description: API tự quy đổi theo (Mức đóng gốc + Chức vụ + TN vượt khung)
+            nhân tỷ lệ phần trăm. Không nhập đồng thời giá trị đã quy đổi.
+        regional_allowance:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Phụ cấp khu vực
+          default: '0'
+        other_allowance:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Phụ cấp khác
+          default: '0'
+        reelection_allowance:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Phụ cấp tái cử
+          default: '0'
+        base_salary_vnd_override:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Mức lương cơ sở dùng quy đổi
+          description: Tùy chọn. Dùng khi thành phần là hệ số và cần chỉ định lương
+            cơ sở cho toàn bộ giai đoạn. Nếu bỏ trống với lương Nhà nước, API dùng
+            lương cơ sở theo từng tháng; trước năm 2016 dùng mức tại tháng hưởng.
+      type: object
+      required:
+      - unit
+      - base_value
+      title: Các thành phần Mẫu 07/SBH
+    SourceTrace:
+      properties:
+        source_row_id:
+          type: string
+        from_month:
+          type: string
+        to_month:
+          type: string
+        source_value:
+          anyOf:
+          - type: string
+          - type: 'null'
+        source_unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+        source_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+        confirmation_status:
+          $ref: '#/components/schemas/ConfirmationStatus'
+      type: object
+      required:
+      - source_row_id
+      - from_month
+      - to_month
+      - confirmation_status
+      title: Dấu vết dữ liệu nguồn
+    OneTimeRetirementAllowanceResult:
+      properties:
+        eligible:
+          type: boolean
+        threshold_months:
+          type: integer
+        total_excess_months:
+          type: integer
+        excess_before_retirement_age_months:
+          type: integer
+        excess_after_retirement_age_months:
+          type: integer
+        standard_allowance_vnd:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+        post_retirement_allowance_vnd:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+        total_allowance_vnd:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+        average_basis_vnd:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+        warnings:
+          items:
+            type: string
+          type: array
+      type: object
+      required:
+      - eligible
+      - threshold_months
+      - total_excess_months
+      - excess_before_retirement_age_months
+      - excess_after_retirement_age_months
+      - standard_allowance_vnd
+      - post_retirement_allowance_vnd
+      - total_allowance_vnd
+      - average_basis_vnd
+      title: Chi tiết trợ cấp một lần khi nghỉ hưu
+    ParticipationStatus:
+      type: string
+      enum:
+      - contributed
+      - credited_duration_only
+      - not_participating
+      title: ParticipationStatus
+    PensionRateResult:
+      properties:
+        rounded_years:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Rounded Years
+        base_rate_percent:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Base Rate Percent
+        early_retirement_months:
+          type: integer
+          title: Early Retirement Months
+          default: 0
+        early_retirement_reduction_percent:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Early Retirement Reduction Percent
+        final_rate_percent:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Final Rate Percent
+        reduction_reference_age:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reduction Reference Age
+      type: object
+      required:
+      - base_rate_percent
+      - early_retirement_reduction_percent
+      - final_rate_percent
+      title: PensionRateResult
+    PensionRegime:
+      type: string
+      enum:
+      - compulsory
+      - voluntary
+      - mixed_compulsory_policy
+      - mixed_voluntary_policy
+      - undetermined
+      title: PensionRegime
+    PensionRequest:
+      properties:
+        person:
+          $ref: '#/components/schemas/Person'
+        pension_start_month:
+          type: string
+          pattern: ^\d{4}-(0[1-9]|1[0-2])$
+          title: Pension Start Month
+        retirement_case:
+          $ref: '#/components/schemas/RetirementCase'
+          default: normal
+        contributions:
+          items:
+            $ref: '#/components/schemas/ContributionPeriod'
+          type: array
+          minItems: 1
+          title: Contributions
+        source_document_type:
+          $ref: '#/components/schemas/SourceDocumentType'
+          default: direct_input
+        history_confirmed:
+          type: boolean
+          title: History Confirmed
+          description: Phải là true sau khi cán bộ đã đối chiếu quá trình BHXH.
+          default: false
+        gaps_confirmed_as_non_contribution:
+          type: boolean
+          title: Gaps Confirmed As Non Contribution
+          description: Cờ kiểm toán. Không thay thế các dòng not_participating cho
+            từng khoảng trống; API vẫn yêu cầu khai rõ giai đoạn.
+          default: false
+        impairment_percent:
+          anyOf:
+          - type: number
+            maximum: 100.0
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Impairment Percent
+        impairment_assessment_month:
+          anyOf:
+          - type: string
+            pattern: ^\d{4}-(0[1-9]|1[0-2])$
+          - type: 'null'
+          title: Impairment Assessment Month
+        eligibility_achieved_month:
+          anyOf:
+          - type: string
+            pattern: ^\d{4}-(0[1-9]|1[0-2])$
+          - type: 'null'
+          title: Eligibility Achieved Month
+        early_retirement_policy:
+          anyOf:
+          - $ref: '#/components/schemas/EarlyRetirementPolicyEvidence'
+          - type: 'null'
+        benefit_calculation_scope:
+          type: string
+          enum:
+          - pension_only
+          - pension_and_one_time_allowance
+          title: Phạm vi tính
+          default: pension_and_one_time_allowance
+        transitional_minimum_floor_eligible:
+          type: boolean
+          title: Transitional Minimum Floor Eligible
+          default: false
+        reference_level_vnd:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Reference Level Vnd
+        adjustment:
+          $ref: '#/components/schemas/AdjustmentInput'
+      type: object
+      required:
+      - person
+      - pension_start_month
+      - contributions
+      - history_confirmed
+      title: Yêu cầu tính lương hưu
+      examples:
+      - adjustment:
+          coefficient_year: 2026
+        contributions:
+        - basis_input_type: total_vnd
+          confirmation_status: confirmed
+          contribution_type: compulsory_employer
+          from_month: 1996-10
+          monthly_basis_vnd: 10800000
+          participation_status: contributed
+          to_month: 2026-09
+        gaps_confirmed_as_non_contribution: true
+        history_confirmed: true
+        pension_start_month: 2026-10
+        person:
+          date_of_birth: '1969-09-01'
+          sex: female
+        retirement_case: normal
+        source_document_type: mau_07_sbh
+    PensionResponse:
+      properties:
+        calculation_id:
+          type: string
+          title: Calculation Id
+        status:
+          type: string
+          title: Status
+        error_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Code
+        legal_rule_version:
+          type: string
+          title: Legal Rule Version
+        requested_pension_start_month:
+          type: string
+          title: Requested Pension Start Month
+        retirement_end_date:
+          type: string
+          format: date
+          title: Retirement End Date
+        normal_retirement_age_in_retirement_year:
+          type: string
+          title: Normal Retirement Age In Retirement Year
+        normal_retirement_threshold_date:
+          type: string
+          format: date
+          title: Normal Retirement Threshold Date
+        earliest_normal_pension_start_month:
+          type: string
+          title: Earliest Normal Pension Start Month
+        history_validation:
+          $ref: '#/components/schemas/HistoryValidationResult'
+        contribution_summary:
+          $ref: '#/components/schemas/ContributionSummary'
+        hazardous_summary:
+          $ref: '#/components/schemas/HazardousSummary'
+        early_retirement_policy_result:
+          anyOf:
+          - $ref: '#/components/schemas/EarlyRetirementPolicyResult'
+          - type: 'null'
+        eligibility:
+          $ref: '#/components/schemas/EligibilityResult'
+        average_basis:
+          $ref: '#/components/schemas/AverageBasisResult'
+        basis_component_audit:
+          items:
+            $ref: '#/components/schemas/BasisComponentAudit'
+          type: array
+          title: Basis Component Audit
+        source_trace:
+          items:
+            $ref: '#/components/schemas/SourceTrace'
+          type: array
+          title: Dấu vết dữ liệu nguồn
+        pension_rate:
+          $ref: '#/components/schemas/PensionRateResult'
+        estimated_monthly_pension_vnd:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Estimated Monthly Pension Vnd
+        pension_calculation_formula:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Pension Calculation Formula
+        one_time_retirement_allowance_vnd:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: One Time Retirement Allowance Vnd
+        one_time_retirement_allowance:
+          anyOf:
+          - $ref: '#/components/schemas/OneTimeRetirementAllowanceResult'
+          - type: 'null'
+        minimum_floor_applied:
+          type: boolean
+          title: Minimum Floor Applied
+          default: false
+        assumptions:
+          items:
+            type: string
+          type: array
+          title: Assumptions
+        warnings:
+          items:
+            type: string
+          type: array
+          title: Warnings
+        audit_steps:
+          items:
+            type: string
+          type: array
+          title: Audit Steps
+        legal_references:
+          items:
+            $ref: '#/components/schemas/LegalReference'
+          type: array
+          title: Legal References
+      type: object
+      required:
+      - calculation_id
+      - status
+      - legal_rule_version
+      - requested_pension_start_month
+      - retirement_end_date
+      - normal_retirement_age_in_retirement_year
+      - normal_retirement_threshold_date
+      - earliest_normal_pension_start_month
+      - history_validation
+      - contribution_summary
+      - eligibility
+      - average_basis
+      - pension_rate
+      - estimated_monthly_pension_vnd
+      - one_time_retirement_allowance_vnd
+      title: PensionResponse
+    Person:
+      properties:
+        date_of_birth:
+          type: string
+          format: date
+          title: Ngày sinh
+          examples:
+          - '1969-09-01'
+        sex:
+          $ref: '#/components/schemas/Sex'
+          title: Giới tính
+          description: male = Nam; female = Nữ
+      type: object
+      required:
+      - date_of_birth
+      - sex
+      title: Thông tin cá nhân
+    RetirementAgeReference:
+      type: string
+      enum:
+      - normal_schedule
+      title: RetirementAgeReference
+    RetirementCase:
+      type: string
+      enum:
+      - normal
+      - reduced_capacity
+      title: RetirementCase
+    SbhComponentUnit:
+      type: string
+      enum:
+      - coefficient
+      - vnd
+      title: SbhComponentUnit
+    Sex:
+      type: string
+      enum:
+      - male
+      - female
+      title: Sex
+    SourceDocumentType:
+      type: string
+      enum:
+      - direct_input
+      - mau_07_sbh
+      - vssid
+      - other
+      title: SourceDocumentType
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    YearlyAdjustmentBreakdown:
+      properties:
+        year:
+          type: integer
+          title: Year
+        contribution_type:
+          $ref: '#/components/schemas/ContributionType'
+        months:
+          type: integer
+          title: Months
+        original_total_vnd:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Original Total Vnd
+        adjusted_total_vnd:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Adjusted Total Vnd
+        coefficient:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Coefficient
+      type: object
+      required:
+      - year
+      - contribution_type
+      - months
+      - original_total_vnd
+      - adjusted_total_vnd
+      - coefficient
+      title: YearlyAdjustmentBreakdown
+  securitySchemes:
+    CalculatePensionApiKey:
+      type: apiKey
+      description: Khóa bí mật dùng cho GPT Action, gửi qua header X-API-Key.
+      in: header
+      name: X-API-Key
+tags:
+- name: Hệ thống
+  description: Trạng thái và khả năng của dịch vụ.
+- name: Kiểm tra hồ sơ
+  description: Kiểm tra dữ liệu chuẩn hóa từ Mẫu 07/SBH.
+- name: Tính lương hưu
+  description: Dự tính điều kiện và mức lương hưu.
+x-source-api-version: 2.4.0
+servers:
+- url: https://calculatepension-api.onrender.com
+  description: API production trên Render
+security:
+- CalculatePensionApiKey: []

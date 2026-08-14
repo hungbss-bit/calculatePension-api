@@ -1,5 +1,5 @@
-pytest>=8,<9
-httpx>=0.27,<1.0
-jsonschema>=4,<5
+pytest==8.4.2
+httpx==0.28.1
+jsonschema==4.26.0
 -r requirements.txt
-PyYAML>=6.0,<7.0
+PyYAML==6.0.3

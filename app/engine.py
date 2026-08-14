@@ -46,8 +46,8 @@ from .rules import (
 
 MONEY = Decimal("1")
 PRE1995_CUTOFF = date(1995, 1, 1)
-ENGINE_VERSION = "1.0.10-rc"
-POLICY_VERSION = "VN-BHXH-PENSION-V1.0-2026"
+ENGINE_VERSION = "1.1.0"
+POLICY_VERSION = "VN-BHXH-PENSION-V2.1-2026"
 VIETNAM_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 DISCLAIMER = (
     "Đây là kết quả ước tính, không thay thế quyết định giải quyết chế độ "
@@ -127,6 +127,11 @@ def months_difference(later: date, earlier: date) -> int:
     return max(0, (later.year - earlier.year) * 12 + later.month - earlier.month)
 
 
+def first_pension_month_after_threshold(threshold: date) -> date:
+    """Tháng liền kề sau tháng đủ tuổi theo Điều 15 Thông tư 12/2025/TT-BNV."""
+    return next_month(date(threshold.year, threshold.month, 1))
+
+
 def _append(issues: list[Issue], code: str, message: str, *fields: str) -> None:
     issues.append(Issue(code=code, message=message, fields=tuple(fields)))
 
@@ -160,10 +165,10 @@ def validate_request(request: PensionCalculationRequest) -> ValidationDiagnostic
             "pension_start_month",
         )
 
-    # V1.0.9 bổ sung đúng hai nhánh nghỉ hưu trước tuổi đã được thống nhất:
+    # V2.1 hỗ trợ đúng hai nhánh nghỉ hưu trước tuổi đã được kiểm thử:
     # (1) reduced_capacity: suy giảm khả năng lao động;
     # (2) normal + decree_154_streamlining: tinh giản biên chế theo NĐ 154/2025/NĐ-CP.
-    # Các nhánh nghề nặng nhọc/đặc thù và hầm lò vẫn ngoài phạm vi V1.x.
+    # Các nhánh nghề nặng nhọc/đặc thù và hầm lò vẫn yêu cầu thẩm định thủ công.
     supported_case = request.retirement_case in {
         RetirementCase.normal,
         RetirementCase.reduced_capacity,
@@ -187,7 +192,7 @@ def validate_request(request: PensionCalculationRequest) -> ValidationDiagnostic
             issues,
             "OUT_OF_SCOPE_RETIREMENT_CASE",
             (
-                "V1.x chỉ hỗ trợ nghỉ hưu bình thường hoặc suy giảm khả năng lao động; "
+                "V2.1 chỉ hỗ trợ nghỉ hưu bình thường hoặc suy giảm khả năng lao động; "
                 "nghề nặng nhọc/đặc thù và hầm lò chưa được tự động hóa."
             ),
             "retirement_case",
@@ -226,9 +231,31 @@ def validate_request(request: PensionCalculationRequest) -> ValidationDiagnostic
                 "Tỷ lệ suy giảm khả năng lao động phải từ 61% trong phạm vi tự động hóa này.",
                 "impairment_percent",
             )
+        if request.impairment_assessment_month is None:
+            _append(
+                issues,
+                "IMPAIRMENT_ASSESSMENT_MONTH_REQUIRED",
+                "Trường hợp reduced_capacity phải có tháng kết luận giám định y khoa.",
+                "impairment_assessment_month",
+            )
     elif request.impairment_percent is not None:
         warnings.append(
             "impairment_percent được cung cấp nhưng không dùng vì retirement_case không phải reduced_capacity."
+        )
+
+    if request.transitional_minimum_floor_eligible and request.reference_level_vnd is None:
+        _append(
+            issues,
+            "REFERENCE_LEVEL_REQUIRED",
+            (
+                "Hồ sơ được xác nhận thuộc diện mức lương hưu tối thiểu chuyển tiếp "
+                "nhưng thiếu reference_level_vnd tại tháng hưởng."
+            ),
+            "reference_level_vnd",
+        )
+    elif not request.transitional_minimum_floor_eligible and request.reference_level_vnd is not None:
+        warnings.append(
+            "reference_level_vnd được cung cấp nhưng không áp dụng vì transitional_minimum_floor_eligible=false."
         )
 
     month_owner: dict[date, int] = {}
@@ -716,7 +743,10 @@ def _basis_for_month(
         # hệ số phải nhân với mức lương cơ sở/mức tham chiếu tại thời điểm
         # hưởng lương hưu, không phải mức lương cơ sở của từng năm đóng.
         pension_month = parse_year_month(request.pension_start_month)
-        reference = base_salary_for_month(pension_month)
+        reference = (
+            period.sbh_components.base_salary_vnd_override
+            or base_salary_for_month(pension_month)
+        )
         return total * reference, SbhComponentUnit.coefficient
 
     return None, None
@@ -831,6 +861,7 @@ def determine_eligibility(
     pension_start = parse_year_month(request.pension_start_month)
     retirement_end = previous_month_end(pension_start)
     normal = _normal_threshold(request)
+    normal_pension_start = first_pension_month_after_threshold(normal)
     compulsory_months = sum(
         1
         for row in records
@@ -857,8 +888,8 @@ def determine_eligibility(
             )
         return Eligibility(normal, normal, 0, Decimal("0"))
 
-    # Case 1: suy giảm khả năng lao động. V1.x chỉ tự động hóa ngưỡng từ 61%
-    # và thời gian nghỉ trước tuổi không quá 5 năm. Theo Điều 66 Luật BHXH 2024:
+    # Case 1: suy giảm khả năng lao động. V2.1 tự động hóa ngưỡng từ 61%:
+    # tối đa 5 năm nếu dưới 81%, tối đa 10 năm nếu từ 81%. Theo Điều 66:
     # mỗi năm giảm 2%; dưới 6 tháng không giảm; từ đủ 6 đến dưới 12 tháng giảm 1%.
     if request.retirement_case == RetirementCase.reduced_capacity:
         if compulsory_months < 240:
@@ -870,17 +901,30 @@ def determine_eligibility(
                 ),
                 ["contributions"],
             )
+        assessment_month = parse_year_month(request.impairment_assessment_month or "1900-01")
+        earliest_after_assessment = next_month(assessment_month)
+        if pension_start < earliest_after_assessment:
+            raise BusinessError(
+                "PENSION_START_BEFORE_IMPAIRMENT_ASSESSMENT",
+                (
+                    "Tháng hưởng lương hưu phải từ tháng liền kề sau tháng có "
+                    "kết luận giám định suy giảm khả năng lao động."
+                ),
+                ["pension_start_month", "impairment_assessment_month"],
+            )
         if retirement_end >= normal:
             return Eligibility(normal, normal, 0, Decimal("0"), (
                 "Hồ sơ đã đủ tuổi nghỉ hưu bình thường; không áp dụng giảm tỷ lệ do nghỉ trước tuổi.",
             ))
-        early_months = months_difference(normal, pension_start)
-        if early_months > 60:
+        early_months = months_difference(normal_pension_start, pension_start)
+        maximum_early_months = 120 if (request.impairment_percent or Decimal("0")) >= Decimal("81") else 60
+        if early_months > maximum_early_months:
             raise BusinessError(
-                "EARLY_RETIREMENT_OVER_5_YEARS",
+                "EARLY_RETIREMENT_OVER_IMPAIRMENT_LIMIT",
                 (
                     f"Thời điểm hưởng lương hưu sớm khoảng {early_months} tháng, "
-                    "vượt quá phạm vi V1.x là không quá 5 năm."
+                    f"vượt quá giới hạn {maximum_early_months} tháng ứng với mức "
+                    "suy giảm khả năng lao động đã khai."
                 ),
                 ["pension_start_month", "person.date_of_birth"],
             )
@@ -899,7 +943,7 @@ def determine_eligibility(
             ),
         )
 
-    # Case 2: tinh giản biên chế theo NĐ 154/2025/NĐ-CP. Trong V1.x chỉ tự động
+    # Case 2: tinh giản biên chế theo NĐ 154/2025/NĐ-CP. V2.1 chỉ tự động
     # hóa điều kiện lao động bình thường; không suy đoán các nhánh nghề nặng nhọc,
     # vùng đặc biệt khó khăn hoặc lực lượng đặc thù. Chính sách này không trừ tỷ lệ
     # lương hưu do nghỉ trước tuổi.
@@ -923,13 +967,13 @@ def determine_eligibility(
             return Eligibility(normal, normal, 0, Decimal("0"), (
                 "Case 2 – NĐ 154/2025/NĐ-CP: không giảm tỷ lệ do nghỉ trước tuổi.",
             ))
-        early_months = months_difference(normal, pension_start)
+        early_months = months_difference(normal_pension_start, pension_start)
         if early_months > 60:
             raise BusinessError(
                 "DECREE_154_EARLY_OVER_5_YEARS",
                 (
                     f"Thời điểm hưởng lương hưu sớm khoảng {early_months} tháng; "
-                    "V1.x chỉ tự động hóa nhánh nghỉ trước tuổi không quá 5 năm "
+                    "V2.1 chỉ tự động hóa nhánh nghỉ trước tuổi không quá 5 năm "
                     "trong điều kiện lao động bình thường."
                 ),
                 ["pension_start_month", "person.date_of_birth"],
@@ -1118,7 +1162,7 @@ def calculate_average_salary(
         warnings.append(
             f"Quá trình lương Nhà nước có {len(state_basis)} tháng có mức đóng, ít hơn cửa sổ {state_window} tháng; API dùng toàn bộ tháng hiện có."
         )
-    # Contract V2.0: basis_months_used là số tháng thực tế trực tiếp làm mẫu số
+    # Contract V2.1: basis_months_used là số tháng thực tế trực tiếp làm mẫu số
     # của phép bình quân. Với hồ sơ Nhà nước thuần túy, đây là cửa sổ cuối
     # (ví dụ 60 tháng), không phải tổng số tháng tham gia sau khi loại PRE-1995.
     # Với hồ sơ hỗn hợp, giữ tổng số tháng quy đổi trọng số theo Rule hỗn hợp.
@@ -1193,7 +1237,7 @@ def calculate_one_time_allowance(
     )
     if request.retirement_age_eligible_month is None:
         warnings.append(
-            "retirement_age_eligible_month không được cung cấp; API suy ra từ ngày sinh, giới tính và retirement_case."
+            "retirement_age_eligible_month không được cung cấp; API suy ra tháng đủ tuổi nghỉ hưu bình thường từ ngày sinh và giới tính."
         )
     elif total_excess > 0 and eligible_month != derived_eligible_month:
         raise BusinessError(
@@ -1299,6 +1343,14 @@ def calculate(request: PensionCalculationRequest) -> PensionCalculationResponse:
     estimated = (
         average * after_rate / Decimal("100")
     ).quantize(MONEY, rounding=ROUND_HALF_UP)
+    minimum_floor_applied = False
+    if (
+        request.transitional_minimum_floor_eligible
+        and request.reference_level_vnd is not None
+        and estimated < request.reference_level_vnd
+    ):
+        estimated = request.reference_level_vnd.quantize(MONEY, rounding=ROUND_HALF_UP)
+        minimum_floor_applied = True
     average_rounded = average.quantize(MONEY, rounding=ROUND_HALF_UP)
     allowance = calculate_one_time_allowance(
         request,
@@ -1310,14 +1362,14 @@ def calculate(request: PensionCalculationRequest) -> PensionCalculationResponse:
     allowance_formula = None
     if allowance is not None:
         allowance_formula = (
-            "0.5 × mức bình quân × số tháng vượt trước/sát tuổi / 12 "
-            "+ 2 × mức bình quân × số tháng vượt sau tuổi / 12"
+            "0,5 × mức bình quân × số năm vượt trước tuổi đã quy đổi "
+            "+ 2 × mức bình quân × số năm vượt sau tuổi đã quy đổi"
         )
 
     warnings = list(diagnostics.response.warnings)
     warnings.extend(eligibility.warnings)
     warnings.extend(average_warnings)
-    warnings.append(f"Phiên bản Engine: {ENGINE_VERSION}; Policy V1.0: {POLICY_VERSION}.")
+    warnings.append(f"Phiên bản Engine: {ENGINE_VERSION}; Policy: {POLICY_VERSION}.")
     warnings.append(DISCLAIMER)
 
     identity = resolve_identity(request)
@@ -1347,6 +1399,7 @@ def calculate(request: PensionCalculationRequest) -> PensionCalculationResponse:
         early_retirement_reduction=float(eligibility.early_retirement_reduction),
         rate_after_reduction=float(after_rate),
         estimated_pension=float(estimated),
+        minimum_floor_applied=minimum_floor_applied,
         warnings=warnings,
         one_time_retirement_allowance=allowance,
     )
