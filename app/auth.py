@@ -149,7 +149,7 @@ def get_auth_diagnostics(x_api_key: str | None) -> dict[str, object]:
 
     return {
         "service": "calculatePension",
-        "version": "2.4.0",
+        "version": "1.0.6",
         "diagnostics_enabled": True,
         "api_key_required": _env_flag("REQUIRE_API_KEY", default=True),
         "configured": bool(config.normalized_value),

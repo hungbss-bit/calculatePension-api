@@ -92,7 +92,6 @@ class SBHComponents(StrictModel):
     regional_allowance: Annotated[Decimal, Field(ge=0)] = Decimal("0")
     other_allowance: Annotated[Decimal, Field(ge=0)] = Decimal("0")
     reelection_allowance: Annotated[Decimal, Field(ge=0)] = Decimal("0")
-    base_salary_vnd_override: Annotated[Decimal | None, Field(gt=0)] = None
 
     def total(self) -> Decimal:
         return sum(
@@ -130,9 +129,6 @@ class PensionCalculationRequest(StrictModel):
     retirement_case: RetirementCase
     retirement_policy: RetirementPolicy = RetirementPolicy.none
     impairment_percent: Annotated[Decimal | None, Field(ge=0, le=100)] = None
-    impairment_assessment_month: str | None = Field(
-        default=None, pattern=YEAR_MONTH_PATTERN
-    )
     contributions: list[Contribution] = Field(min_length=1)
     retirement_age_eligible_month: str | None = Field(
         default=None, pattern=YEAR_MONTH_PATTERN
@@ -140,8 +136,6 @@ class PensionCalculationRequest(StrictModel):
     benefit_calculation_scope: BenefitCalculationScope = (
         BenefitCalculationScope.pension_and_one_time_allowance
     )
-    transitional_minimum_floor_eligible: bool = False
-    reference_level_vnd: Annotated[Decimal | None, Field(gt=0)] = None
 
 
 class NormalizedSummary(StrictModel):
@@ -176,7 +170,7 @@ class CalculationIdentity(StrictModel):
 
 
 class CalculationTrace(StrictModel):
-    """Dấu vết tính toán tối thiểu để AI Agent giải thích và kiểm toán V2.1."""
+    """Dấu vết tính toán tối thiểu để AI Agent giải thích và kiểm toán V1.0."""
     duration_months: int
     average_basis_months: int
     average_basis_method: str
@@ -204,7 +198,6 @@ class PensionCalculationResponse(StrictModel):
     early_retirement_reduction: float
     rate_after_reduction: float
     estimated_pension: float
-    minimum_floor_applied: bool = False
     warnings: list[str] = Field(default_factory=list)
     one_time_retirement_allowance: OneTimeRetirementAllowance | None = None
 

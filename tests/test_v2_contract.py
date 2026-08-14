@@ -54,6 +54,25 @@ def test_v2_http_contract_returns_v2_response():
     assert body['early_retirement_policy_result']['no_reduction_applied'] is True
 
 
+def test_v2_adapter_auto_normalizes_pre1995_no_salary_row_to_duration_only():
+    p=v2_bau()
+    p["contributions"] = [
+        {
+            "from_month": "1993-06", "to_month": "1994-12",
+            "participation_status": "contributed",
+            "contribution_type": "compulsory_state"
+        },
+        *p["contributions"][1:]
+    ]
+    req=to_internal(p)
+    first=req.contributions[0]
+    assert first.participation_status.value == "credited_duration_only"
+    assert first.duration_only_reason.value == "pre1995_no_salary_or_living_allowance"
+    assert first.basis_input_type is None
+    assert first.monthly_basis_vnd is None
+    assert first.sbh_components is None
+
+
 def test_v2_adapter_pre1995_duration_only_does_not_carry_salary_basis():
     p=v2_bau()
     p["contributions"] = [
@@ -78,7 +97,7 @@ def test_v2_response_validates_against_public_response_schema():
     body=__import__("app.v2_adapter", fromlist=["build_v2_response"]).build_v2_response(
         p, r, __import__("app.engine", fromlist=["validate_request"]).validate_request(req), req
     )
-    contract=yaml.safe_load((Path(__file__).resolve().parents[1] / "contracts" / "02_API_V2.4.0.yaml").read_text(encoding="utf-8"))
+    contract=yaml.safe_load((Path(__file__).resolve().parents[1] / "contracts" / "02_API_V2.3.0.yaml").read_text(encoding="utf-8"))
     schemas=contract["components"]["schemas"]
     def resolve(obj):
         if isinstance(obj, dict) and "$ref" in obj:
