@@ -10,22 +10,27 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .auth import get_auth_diagnostics, verify_api_key
-from .engine import BusinessError, calculate, validate_request, calculate_average_salary, expand_records
+from .engine import (
+    BusinessError, ENGINE_VERSION, POLICY_VERSION, calculate, validate_request,
+    calculate_average_salary, expand_records,
+)
 from .models import ErrorResponse
 from .privacy_vi import get_privacy_policy_html
 from .swagger_vi import get_swagger_ui_vi_html
-from .v2_adapter import validate_v2_payload, to_internal, build_v2_response
+from .v2_adapter import (
+    build_history_validation, build_v2_response, payload_evidence_issues,
+    to_internal, validate_v2_payload,
+)
 
-API_VERSION = "2.3.0"
-ACTION_SCHEMA_VERSION = "2.0.0"
-ADAPTER_RELEASE = "R1.9"
+API_VERSION = "2.4.0"
+ACTION_SCHEMA_VERSION = "2.1.0"
 MAX_REQUEST_BODY_BYTES = int(os.getenv("MAX_REQUEST_BODY_BYTES", "2097152"))
 
 app = FastAPI(
     title="calculatePension API",
     version=API_VERSION,
     description=(
-        "API dự tính lương hưu BHXH Việt Nam 2.3.0; contract GPT Action V2.0. "
+        "API dự tính lương hưu BHXH Việt Nam 2.4.0; contract GPT Action V2.1. "
         "Kết quả chỉ mang tính ước tính."
     ),
     docs_url=None,
@@ -33,7 +38,7 @@ app = FastAPI(
 )
 
 # Static contract is the single source for the public API documentation.
-_CONTRACT_PATH = Path(__file__).resolve().parent.parent / "contracts" / "02_API_V2.3.0.yaml"
+_CONTRACT_PATH = Path(__file__).resolve().parent.parent / "contracts" / "02_API_V2.4.0.yaml"
 _CONTRACT = yaml.safe_load(_CONTRACT_PATH.read_text(encoding="utf-8"))
 
 
@@ -84,11 +89,11 @@ def privacy_policy() -> HTMLResponse:
 
 @app.get("/health", include_in_schema=False)
 def health() -> dict[str, str]:
-    return {"status":"ok","service":"calculatePension","version":API_VERSION,"action_schema_version":ACTION_SCHEMA_VERSION,"schema_version":"2.3.0","engine_version":"1.0.10-rc","adapter_release":ADAPTER_RELEASE,"policy_version":"VN-BHXH-PENSION-V1.0-2026"}
+    return {"status":"ok","service":"calculatePension","version":API_VERSION,"action_schema_version":ACTION_SCHEMA_VERSION,"schema_version":API_VERSION,"engine_version":ENGINE_VERSION,"policy_version":POLICY_VERSION}
 
 @app.get("/version", include_in_schema=False)
 def version() -> dict[str, str]:
-    return {"api_version":API_VERSION,"action_schema_version":ACTION_SCHEMA_VERSION,"engine_version":"1.0.10-rc","adapter_release":ADAPTER_RELEASE,"policy_version":"VN-BHXH-PENSION-V1.0-2026","contract":"02_API_V2.3.0.yaml"}
+    return {"api_version":API_VERSION,"action_schema_version":ACTION_SCHEMA_VERSION,"engine_version":ENGINE_VERSION,"policy_version":POLICY_VERSION,"contract":"02_API_V2.4.0.yaml"}
 
 @app.get("/v1/authDiagnostics", include_in_schema=False)
 def auth_diagnostics(x_api_key: str | None = Header(default=None, alias="X-API-Key")):
@@ -96,12 +101,27 @@ def auth_diagnostics(x_api_key: str | None = Header(default=None, alias="X-API-K
 
 @app.get("/v1/capabilities", include_in_schema=False, dependencies=[Depends(verify_api_key)])
 def capabilities():
-    return {"api_version":API_VERSION,"action_schema_version":ACTION_SCHEMA_VERSION,"adapter_release":ADAPTER_RELEASE,"supports":["validateContributionHistory","calculatePension","mau_07_sbh_components","nd154_2025_streamlining"],"scope_excludes":["armed_forces"],"nd154_state_budget_allowance_excluded":True}
+    return {
+        "api_version": API_VERSION,
+        "action_schema_version": ACTION_SCHEMA_VERSION,
+        "supports": [
+            "validateContributionHistory", "calculatePension",
+            "normal", "reduced_capacity", "mau_07_sbh_components",
+            "professional_seniority_percent", "nd154_2025_streamlining",
+            "one_time_retirement_allowance_breakdown",
+        ],
+        "manual_review_cases": [
+            "hazardous_or_special_region", "underground_coal",
+            "especially_hazardous_reduced_capacity", "armed_forces",
+        ],
+        "coefficient_years": [2026],
+        "nd154_state_budget_allowance_excluded": True,
+    }
 
 
 def _read_payload(request: Request):
     # FastAPI dependency injection is intentionally avoided so the public request
-    # contract can remain exactly the externally supplied V2.0/2.3.0 JSON Schema.
+    # contract can remain exactly the externally supplied V2.1/2.4.0 JSON Schema.
     return request.json()
 
 @app.post("/v1/validateContributionHistory", operation_id="validateContributionHistory", dependencies=[Depends(verify_api_key)], summary="Kiểm tra dữ liệu quá trình BHXH trước khi tính")
@@ -109,25 +129,13 @@ async def validate_history(request: Request):
     try:
         payload = await request.json()
         validate_v2_payload(payload)
-        internal = to_internal(payload)
+        evidence_issues = payload_evidence_issues(payload)
+        internal = to_internal(payload, enforce_evidence=False)
         diag = validate_request(internal)
-        total = diag.response.normalized_summary.total_contribution_months if diag.response.normalized_summary else 0
-        excluded = diag.response.normalized_summary.excluded_bhtn_months if diag.response.normalized_summary else 0
         avg_months = 0
-        credited_duration_only_months = 0
-        if diag.response.validation:
-            records = expand_records(internal)
-            _, _, avg_months, _ = calculate_average_salary(internal, records)
-            # Count normalized monthly records instead of reading non-existent
-            # Contribution.to_date/from_date attributes. The old R1.8 code raised
-            # AttributeError as soon as a credited_duration_only PRE-1995 row was
-            # present, which surfaced to GPT as INTERNAL_CALCULATION_ERROR.
-            credited_duration_only_months = sum(
-                1
-                for r in records
-                if r.participation_status.value == "credited_duration_only"
-            )
-        return {"valid_for_calculation":diag.response.validation,"total_unique_months":total,"average_basis_months":avg_months,"credited_duration_only_months":credited_duration_only_months,"excluded_non_participation_months":excluded,"gaps":[],"overlaps":[],"issues":list(diag.response.warnings)}
+        if diag.response.validation and not evidence_issues:
+            _, _, avg_months, _ = calculate_average_salary(internal, expand_records(internal))
+        return build_history_validation(payload, diag, avg_months, evidence_issues)
     except ValueError as exc:
         return JSONResponse(status_code=422, content={"detail":[{"loc":["body"],"msg":str(exc),"type":"value_error"}]})
     except BusinessError as exc:
@@ -138,6 +146,11 @@ async def calculate_pension(request: Request):
     try:
         payload = await request.json()
         validate_v2_payload(payload)
+        evidence_issues = payload_evidence_issues(payload)
+        if evidence_issues:
+            return JSONResponse(status_code=422, content={"detail":[{
+                "loc":["body"], "msg":issue["message_vi"], "type":issue["code"]
+            } for issue in evidence_issues]})
         internal = to_internal(payload)
         diagnostics = validate_request(internal)
         if not diagnostics.response.validation:
